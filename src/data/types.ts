@@ -206,15 +206,31 @@ export interface Retailer {
 
 /* ── Item-Retailer Tracker — the atomic workflow unit ──────────────────── */
 
+/**
+ * One product at one retailer — the atomic unit of the whole workstream.
+ *
+ * Four fields are required, because the database requires them: the pairing
+ * itself, where it sits against the current range, and where the item stands.
+ * Everything else is optional and genuinely unknown at the moment a pairing is
+ * first made — nobody has a view on fit, a door count or a velocity the
+ * instant a product is put in front of an account.
+ *
+ * The same nullable-column reading the Retailer type carries, for the same
+ * reason: every one of these columns is nullable in Postgres, and declaring
+ * them present is a lie that holds only while the data happens to be complete.
+ * An absent velocity is not a velocity of nought, and a step nobody has dated
+ * is not a step due today.
+ */
 export interface WorkstreamRecord {
   id: string;
   retailerId: RetailerId;
-  brokerId: BrokerId;
+  /** Absent while nobody carries it; brokers.id is ON DELETE SET NULL. */
+  brokerId?: BrokerId;
   productId: ProductId;
   currentTarget: CurrentTarget;
   itemStatus: ItemStatus;
   sampleStatus: SampleStatus;
-  fit: Fit;
+  fit?: Fit;
   /** The buyer's own words. Absent until they have actually said something. */
   buyerFeedback?: string;
   /** Theme the feedback belongs to, for rolling up recurring signals. */
@@ -222,21 +238,27 @@ export interface WorkstreamRecord {
   requestedRetail?: number;
   quotedCost?: number;
   moq?: number;
-  estimatedDoors: number;
+  estimatedDoors?: number;
   /**
    * Per-SKU velocity assumption. Held on the record rather than inherited
    * from the retailer, because SKUs in the same account do not move at the
    * same rate — and it makes the annual figure verifiable from its own row.
    */
-  unitsPerStoreWeek: number;
-  /** estimatedDoors x unitsPerStoreWeek x 52. */
-  estimatedAnnualUnits: number;
-  nextAction: string;
-  nextActionDate: string;
-  ownerId: OwnerId;
+  unitsPerStoreWeek?: number;
+  /**
+   * estimatedDoors x unitsPerStoreWeek x 52.
+   *
+   * A stored generated column, so it is absent exactly when either input is —
+   * Postgres yields NULL rather than nought, and so does this.
+   */
+  estimatedAnnualUnits?: number;
+  nextAction?: string;
+  nextActionDate?: string;
+  /** Absent while nobody owns the next step. */
+  ownerId?: OwnerId;
   /** Links to the tracked action list when this step is formally tracked. */
   actionId?: string;
-  notes: string;
+  notes?: string;
 }
 
 /* ── Actions ───────────────────────────────────────────────────────────── */

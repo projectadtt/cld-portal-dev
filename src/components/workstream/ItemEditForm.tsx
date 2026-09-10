@@ -34,8 +34,9 @@ export interface ItemEditFormProps {
   retailerId: string;
   itemStatus: string;
   sampleStatus: string;
-  nextAction: string;
-  nextActionDate: string;
+  /** Both absent on a pairing nobody has planned a step for yet. */
+  nextAction?: string;
+  nextActionDate?: string;
   /** The action this item's work is tracked as, where one exists. */
   tracked?: { id: string; label: string; status: string; due: string; owner: string };
   /** Who a newly tracked action would go to. */
@@ -206,7 +207,7 @@ export function ItemEditForm(props: ItemEditFormProps) {
                 name="nextAction"
                 type="text"
                 maxLength={300}
-                defaultValue={props.nextAction}
+                defaultValue={props.nextAction ?? ""}
                 aria-invalid={errors.nextAction ? true : undefined}
                 aria-describedby={errors.nextAction ? "nextAction-error" : undefined}
                 className={CONTROL}
@@ -218,7 +219,7 @@ export function ItemEditForm(props: ItemEditFormProps) {
                 id="nextActionDate"
                 name="nextActionDate"
                 type="date"
-                defaultValue={props.nextActionDate}
+                defaultValue={props.nextActionDate ?? ""}
                 aria-invalid={errors.nextActionDate ? true : undefined}
                 aria-describedby={
                   errors.nextActionDate ? "nextActionDate-error" : undefined

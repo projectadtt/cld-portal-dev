@@ -90,14 +90,20 @@ export function RetailFitSummary() {
                           " at " +
                           retailers[i].name +
                           " — " +
-                          record.fit +
-                          " fit, " +
+                          (record.fit ? record.fit + " fit" : "fit not recorded") +
+                          ", " +
                           record.itemStatus
                         }
-                        title={record.fit + " fit · " + record.itemStatus}
+                        title={
+                          (record.fit ? record.fit + " fit" : "Fit not recorded") +
+                          " · " +
+                          record.itemStatus
+                        }
                         className={
                           "mx-auto block size-5 rounded-[2px] transition-opacity hover:opacity-70 " +
-                          FIT_FILL[record.fit]
+                          /* A pairing with no fit recorded still occupies its
+                             cell — it exists — at the faintest weight. */
+                          (record.fit ? FIT_FILL[record.fit] : FIT_FILL.Unknown)
                         }
                       />
                     ) : (

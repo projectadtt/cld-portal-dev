@@ -1470,10 +1470,20 @@ function furthestItemStatus(
   ).itemStatus;
 }
 
-/** FIT_LEVELS runs strongest first, so the lowest index is the best read. */
+/**
+ * FIT_LEVELS runs strongest first, so the lowest index is the best read.
+ *
+ * Records with no fit recorded are not part of the comparison at all: an
+ * unformed view is not a weak one, and letting it stand in as the worst would
+ * quietly drag a product's summary down. If nothing has a fit, there is no
+ * best fit to report.
+ */
 function strongestFit(records: WorkstreamRecord[]): Fit | undefined {
-  if (records.length === 0) return undefined;
-  return records.reduce((best, row) =>
+  const rated = records.filter(
+    (row): row is WorkstreamRecord & { fit: Fit } => row.fit !== undefined,
+  );
+  if (rated.length === 0) return undefined;
+  return rated.reduce((best, row) =>
     FIT_LEVELS.indexOf(row.fit) < FIT_LEVELS.indexOf(best.fit) ? row : best,
   ).fit;
 }
@@ -1540,7 +1550,8 @@ export function getWorkedProducts(): ProductSummary[] {
 export interface ProductConversation {
   record: WorkstreamRecord;
   retailer: Retailer;
-  broker: Broker;
+  /** Absent while nobody carries this pairing. */
+  broker?: Broker;
   action?: Action;
 }
 
@@ -1573,7 +1584,10 @@ export function getProductDetail(id: string): ProductDetail | null {
       .map((record) => ({
         record,
         retailer: d.retailersById[record.retailerId],
-        broker: d.brokersById[record.brokerId],
+        broker:
+          record.brokerId === undefined
+            ? undefined
+            : d.brokersById[record.brokerId],
         action: record.actionId
           ? d.actions.find((a) => a.id === record.actionId)
           : undefined,

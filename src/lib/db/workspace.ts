@@ -149,12 +149,18 @@ type ProductRow = {
   readiness: string; upc: string | null; source_notes: string | null;
   image_path: string | null;
 };
+/* Same reading as RetailerRow above: only what workstream_items marks NOT NULL
+   -- id, retailer_id, product_id, current_target, item_status -- is non-null.
+   estimated_annual_units is a generated column over two nullable inputs, so
+   Postgres yields NULL for it whenever either is missing. */
 type WorkstreamRow = {
-  id: string; retailer_id: string; broker_id: string; product_id: string;
-  current_target: string; item_status: string; fit: string;
+  id: string; retailer_id: string; broker_id: string | null; product_id: string;
+  current_target: string; item_status: string; fit: string | null;
   requested_retail: string | null; quoted_cost: string | null; moq: number | null;
-  estimated_doors: number; units_per_store_week: string; estimated_annual_units: number;
-  next_action: string; next_action_date: string; owner_id: string; notes: string;
+  estimated_doors: number | null; units_per_store_week: string | null;
+  estimated_annual_units: number | null;
+  next_action: string | null; next_action_date: string | null;
+  owner_id: string | null; notes: string | null;
 };
 type ActionRow = {
   id: string; label: string; retailer_id: string; product_id: string | null;
@@ -445,25 +451,30 @@ async function load(clientId: string): Promise<Workspace> {
     return {
       id: w.id,
       retailerId: w.retailer_id as RetailerId,
-      brokerId: w.broker_id as BrokerId,
+      brokerId: (w.broker_id ?? undefined) as BrokerId | undefined,
       productId: w.product_id as ProductId,
       currentTarget: must(CURRENT_TARGET_VALUES, w.current_target, `workstream.${w.id}.currentTarget`),
       itemStatus: must(ITEM_STATUSES, w.item_status, `workstream.${w.id}.itemStatus`),
       sampleStatus: furthestSample(samplesByItem.get(w.id)),
-      fit: must(FIT_LEVELS, w.fit, `workstream.${w.id}.fit`),
+      /* maybe, not must: the column is nullable, so NULL is "no view formed
+         yet" rather than a value outside the vocabulary. A value the
+         vocabulary does not contain is still an error. */
+      fit: maybe(FIT_LEVELS, w.fit, `workstream.${w.id}.fit`),
       buyerFeedback: latestFeedback?.quote,
       feedbackTheme: latestFeedback?.theme ?? undefined,
       requestedRetail: w.requested_retail === null ? undefined : Number(w.requested_retail),
       quotedCost: w.quoted_cost === null ? undefined : Number(w.quoted_cost),
       moq: w.moq ?? undefined,
-      estimatedDoors: w.estimated_doors,
-      unitsPerStoreWeek: Number(w.units_per_store_week),
-      estimatedAnnualUnits: w.estimated_annual_units,
-      nextAction: w.next_action,
-      nextActionDate: w.next_action_date,
-      ownerId: w.owner_id as OwnerId,
+      estimatedDoors: w.estimated_doors ?? undefined,
+      /* num(), not Number(): Number(null) is 0, which would turn an unrecorded
+         velocity into a claim that the item sells nothing. */
+      unitsPerStoreWeek: num(w.units_per_store_week),
+      estimatedAnnualUnits: w.estimated_annual_units ?? undefined,
+      nextAction: text(w.next_action),
+      nextActionDate: text(w.next_action_date),
+      ownerId: (w.owner_id ?? undefined) as OwnerId | undefined,
       actionId: pointer?.id,
-      notes: w.notes,
+      notes: text(w.notes),
     };
   });
 

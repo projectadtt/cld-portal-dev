@@ -125,8 +125,16 @@ export default async function RetailerDetailPage({
             <SectionHeader
               title="Retail workstream"
               description="Every item on this account: where it stands, where its sample is, and what moves it forward."
+              action={
+                <SectionLink href={"/retailers/" + retailer.id + "/items/new"}>
+                  Add an item
+                </SectionLink>
+              }
             />
-            <RetailerItems rows={itemRows} />
+            <RetailerItems
+              rows={itemRows}
+              newHref={"/retailers/" + retailer.id + "/items/new"}
+            />
           </section>
         </div>
       ) : null}

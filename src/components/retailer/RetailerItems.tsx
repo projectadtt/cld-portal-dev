@@ -3,13 +3,18 @@ import Link from "next/link";
 
 import { EmptyState } from "@/components/primitives/EmptyState";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
-import { cn } from "@/lib/cn";
+import { cn, meta } from "@/lib/cn";
 import {
   formatDueDate,
   getOwnerName,
   type RetailerItemRow,
 } from "@/lib/selectors";
 import { itemStatusTone, sampleStatusTone } from "@/lib/status";
+
+/** Nothing invented to fill a cell: an empty field reads as empty. */
+function Blank() {
+  return <span className="text-ink-faint">—</span>;
+}
 
 const COLUMNS = [
   { label: "Product", className: "w-52 pr-6" },
@@ -29,13 +34,33 @@ const COLUMNS = [
  * buyer's actual words live in the feedback section, so this carries the
  * theme instead; the same sentence is never printed twice on one page.
  */
-export function RetailerItems({ rows }: { rows: RetailerItemRow[] }) {
+export function RetailerItems({
+  rows,
+  /** Where to go to work an item in. Absent hides the invitation. */
+  newHref,
+}: {
+  rows: RetailerItemRow[];
+  newHref?: string;
+}) {
   if (rows.length === 0) {
     return (
-      <EmptyState
-        icon={Package}
-        message="No items have been worked into this account yet."
-      />
+      <div>
+        <EmptyState
+          icon={Package}
+          message="No items have been worked into this account yet."
+        />
+        {/* The empty state is where an account with nothing in it actually
+            gets started, so the way forward belongs here and not only in the
+            section heading above. */}
+        {newHref ? (
+          <Link
+            href={newHref}
+            className="text-sm text-forest transition-opacity hover:opacity-70"
+          >
+            Add the first item
+          </Link>
+        ) : null}
+      </div>
     );
   }
 
@@ -132,11 +157,18 @@ export function RetailerItems({ rows }: { rows: RetailerItemRow[] }) {
                   </>
                 ) : (
                   <>
-                    <span className="block text-ink">{record.nextAction}</span>
+                    {/* A pairing just entered has no dated step yet; the
+                        cell says so rather than formatting a missing date. */}
+                    <span className="block text-ink">
+                      {record.nextAction ?? <Blank />}
+                    </span>
                     <span className="mt-1 block text-ink-faint">
-                      {getOwnerName(record.ownerId) +
-                        " · due " +
-                        formatDueDate(record.nextActionDate)}
+                      {meta(
+                        getOwnerName(record.ownerId),
+                        record.nextActionDate
+                          ? "due " + formatDueDate(record.nextActionDate)
+                          : undefined,
+                      )}
                     </span>
                   </>
                 )}

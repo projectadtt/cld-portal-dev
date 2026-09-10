@@ -4,8 +4,10 @@ import Link from "next/link";
 import { EmptyState } from "@/components/primitives/EmptyState";
 import { MetaPair } from "@/components/primitives/MetaPair";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
-import { cn } from "@/lib/cn";
+import { cn, meta } from "@/lib/cn";
 import {
+  NOT_RECORDED,
+  UNASSIGNED,
   formatDueDate,
   getOwnerName,
   isActionOverdue,
@@ -17,7 +19,16 @@ import { itemStatusTone, sampleStatusTone } from "@/lib/status";
  * The whole chain for one product, one row per retailer:
  * retailer, broker, item status, sample, what the buyer said, what happens
  * next. This is the relationship the portal exists to make legible.
+ *
+ * A pairing just entered carries almost none of this — no fit, no doors, no
+ * dated step — so every one of those reads as unrecorded rather than as a
+ * figure somebody worked out.
  */
+
+/** A field that belongs on the record but has not been filled in. */
+function Unrecorded() {
+  return <span className="text-ink-faint">{NOT_RECORDED}</span>;
+}
 export function ProductConversations({
   conversations,
 }: {
@@ -36,6 +47,9 @@ export function ProductConversations({
     <ul>
       {conversations.map(({ record, retailer, broker, action }) => {
         const overdue = action ? isActionOverdue(action) : false;
+        /* The tracked action carries the date when there is one; otherwise the
+           record's own, which may not have been set. */
+        const due = action ? action.due : record.nextActionDate;
 
         return (
           <li
@@ -54,12 +68,16 @@ export function ProductConversations({
                 </h3>
                 <p className="type-label mt-1">
                   {retailer.channel + " · "}
-                  <Link
-                    href={"/workstream?broker=" + broker.id}
-                    className="transition-colors hover:text-forest"
-                  >
-                    {broker.name}
-                  </Link>
+                  {broker ? (
+                    <Link
+                      href={"/workstream?broker=" + broker.id}
+                      className="transition-colors hover:text-forest"
+                    >
+                      {broker.name}
+                    </Link>
+                  ) : (
+                    UNASSIGNED
+                  )}
                 </p>
               </div>
 
@@ -87,24 +105,35 @@ export function ProductConversations({
             ) : null}
 
             <div className="mt-3.5 grid gap-x-8 gap-y-3 border-t border-rule-soft pt-3 sm:grid-cols-3">
-              <MetaPair label="Fit">{record.fit}</MetaPair>
+              <MetaPair label="Fit">
+                {record.fit ?? <Unrecorded />}
+              </MetaPair>
 
+              {/* A door count nobody has estimated is not an estimate of
+                  nought — the figure is absent, not zero. */}
               <MetaPair label="Estimated doors">
-                {record.estimatedDoors.toLocaleString("en-US")}
+                {record.estimatedDoors === undefined ? (
+                  <Unrecorded />
+                ) : (
+                  record.estimatedDoors.toLocaleString("en-US")
+                )}
               </MetaPair>
 
               <MetaPair label="Next action">
-                <span className="block leading-snug">{record.nextAction}</span>
+                <span className="block leading-snug">
+                  {(action ? action.label : record.nextAction) ?? <Unrecorded />}
+                </span>
                 <span
                   className={cn(
                     "mt-1 block text-[13px]",
                     overdue ? "font-medium text-red" : "text-ink-faint",
                   )}
                 >
-                  {getOwnerName(record.ownerId) +
-                    " · due " +
-                    formatDueDate(action ? action.due : record.nextActionDate) +
-                    (overdue ? " · overdue" : "")}
+                  {meta(
+                    getOwnerName(record.ownerId),
+                    due ? "due " + formatDueDate(due) : undefined,
+                    overdue ? "overdue" : undefined,
+                  )}
                 </span>
               </MetaPair>
             </div>

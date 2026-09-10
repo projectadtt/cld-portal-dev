@@ -4,8 +4,9 @@ import Link from "next/link";
 import { EmptyState } from "@/components/primitives/EmptyState";
 import { MetaPair } from "@/components/primitives/MetaPair";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
-import { cn } from "@/lib/cn";
+import { cn, meta } from "@/lib/cn";
 import {
+  NOT_RECORDED,
   formatDueDate,
   getOwnerName,
   type BrokerRecordGroup,
@@ -119,12 +120,17 @@ export function BrokerRecordList({
                     ) : (
                       <>
                         <span className="block leading-snug">
-                          {record.nextAction}
+                          {record.nextAction ?? (
+                            <span className="text-ink-faint">{NOT_RECORDED}</span>
+                          )}
                         </span>
                         <span className="mt-1 block text-[13px] text-ink-faint">
-                          {getOwnerName(record.ownerId) +
-                            " · due " +
-                            formatDueDate(record.nextActionDate)}
+                          {meta(
+                            getOwnerName(record.ownerId),
+                            record.nextActionDate
+                              ? "due " + formatDueDate(record.nextActionDate)
+                              : undefined,
+                          )}
                         </span>
                       </>
                     )}

@@ -73,10 +73,15 @@ export function RetailFitMatrix() {
                         <span
                           className={cn(
                             "flex items-center gap-1.5 text-[13px] leading-5",
-                            FIT_TEXT[fitTone[record.fit]],
+                            /* No fit recorded reads as the quietest tone —
+                               nobody has formed a view, which is not the same
+                               as having formed a weak one. */
+                            record.fit
+                              ? FIT_TEXT[fitTone[record.fit]]
+                              : FIT_TEXT.dormant,
                           )}
                         >
-                          {record.fit}
+                          {record.fit ?? "—"}
                           {/* A sample physically with the buyer is the one
                               thing worth marking beyond fit. */}
                           {isSampleWithRetailer(record.sampleStatus) ? (

@@ -223,14 +223,41 @@ export async function saveWorkstreamItem(
       errors.sampleStatus = "Not a sample status the workbook defines.";
     }
 
+    /*
+     * The next step, which an item is now allowed not to have.
+     *
+     * Both columns are nullable, and a pairing just entered genuinely has no
+     * planned step: nobody has decided what happens next the instant a product
+     * is put against an account. Requiring one here forced the first edit of
+     * every new item to invent a sentence and a date before the item could be
+     * moved to Pitched at all — fabrication demanded by the form.
+     *
+     * So the pair may be empty together. What is still refused is half of it:
+     * a step with no date is undated work, and a date with no step is a
+     * deadline for nothing. Neither is a record worth keeping, and both are
+     * far more likely to be a half-finished edit than an intention.
+     */
     const nextAction = edit.nextAction.trim();
-    if (!nextAction) {
-      errors.nextAction = "Say what happens next on this item.";
-    } else if (nextAction.length > 300) {
+    const nextActionDate = edit.nextActionDate.trim();
+    const noStep = !nextAction && !nextActionDate;
+
+    if (nextAction.length > 300) {
       errors.nextAction = "Keep the next step to a sentence.";
     }
-    if (notADate(edit.nextActionDate)) {
-      errors.nextActionDate = "Needs a real date.";
+    if (!noStep) {
+      if (!nextAction) {
+        errors.nextAction = "Say what happens next, or clear the date as well.";
+      }
+      if (!nextActionDate) {
+        errors.nextActionDate = "Say when, or clear the step as well.";
+      } else if (notADate(nextActionDate)) {
+        errors.nextActionDate = "Needs a real date.";
+      }
+    } else if (edit.trackAsAction) {
+      /* actions.label is NOT NULL, and an action with no wording is not a
+         piece of work anyone could pick up. Tracking needs something to
+         track. */
+      errors.nextAction = "Write the step before putting it on the action list.";
     }
 
     /* The tracked action, if the item has one. Same pointer rule the read
@@ -308,18 +335,23 @@ export async function saveWorkstreamItem(
     if (item.item_status !== edit.itemStatus) {
       changed.push(`item status → ${edit.itemStatus}`);
     }
+    /* Empty writes NULL rather than an empty string: the column's own way of
+       saying no step is planned, and what the read layer reads back. */
+    const storedAction = nextAction || null;
+    const storedDate = nextActionDate || null;
+
     if (
-      item.next_action !== nextAction ||
-      item.next_action_date !== edit.nextActionDate
+      item.next_action !== storedAction ||
+      item.next_action_date !== storedDate
     ) {
-      changed.push("next step");
+      changed.push(storedAction ? "next step" : "next step cleared");
     }
 
     await client.query(
       `update workstream_items
           set item_status = $1, next_action = $2, next_action_date = $3
         where id = $4`,
-      [edit.itemStatus, nextAction, edit.nextActionDate, itemId],
+      [edit.itemStatus, storedAction, storedDate, itemId],
     );
 
     /* -- 4. The sample -------------------------------------------------- */
@@ -413,7 +445,7 @@ export async function saveWorkstreamItem(
           item.retailer_id,
           owner,
           nextAction,
-          edit.nextActionDate,
+          nextActionDate,
           item.product_id,
           itemId,
         ],
@@ -1300,6 +1332,122 @@ export async function updateRetailerStatus(
     return {
       ok: true,
       changed: changed.length > 0 ? changed : ["Nothing changed"],
+    };
+  });
+
+  if (result.ok) resetWorkspace(clientId);
+  return result;
+}
+
+/* ── Workstream items ──────────────────────────────────────────────────── */
+
+/**
+ * Putting one product in front of one account.
+ *
+ * The atomic unit of the whole workstream, and deliberately the smallest
+ * possible write: the pairing, and nothing else. Everything the pairing will
+ * eventually carry — where it stands, how it fits, what the buyer said, what
+ * happens next — is recorded later, by people who know, through the item
+ * workspace that already exists.
+ *
+ * So nothing is invented here. No fit is guessed, no door count estimated, no
+ * date set, no sample created and no feedback written. `item_status` and
+ * `current_target` take the database's own defaults ('Not pitched', 'Target'),
+ * which is what a brand-new relationship genuinely is. Pitching it is the next
+ * act, not this one.
+ *
+ * The broker is inherited rather than asked for: the account already has one,
+ * and an item carried by somebody other than the account's broker is an
+ * exception nobody has asked to express yet. When the account is unassigned
+ * both columns stay null, which the read layer now renders as Unassigned.
+ */
+export async function createWorkstreamItem(
+  retailerId: string,
+  productId: string,
+  clientId: string = DEFAULT_CLIENT_ID,
+): Promise<CreateResult> {
+  const result = await withTransaction<CreateResult>(async (client): Promise<CreateResult> => {
+    /* Both ends of the pairing have to belong to this client. Checked by
+       query rather than by trusting the route, because the product id comes
+       from a form and a form is only a suggestion. */
+    const { rows: retailerRows } = await client.query<{
+      id: string; name: string; assigned_broker_id: string | null;
+    }>(
+      `select id, name, assigned_broker_id from retailers
+        where id = $1 and client_id = $2 and archived_at is null`,
+      [retailerId, clientId],
+    );
+    const retailer = retailerRows[0];
+    if (!retailer) {
+      return {
+        ok: false,
+        changed: [],
+        errors: { form: "That account is not on this client's book." },
+      };
+    }
+
+    const { rows: productRows } = await client.query<{ id: string; name: string }>(
+      `select id, name from products
+        where id = $1 and client_id = $2 and archived_at is null`,
+      [productId, clientId],
+    );
+    const product = productRows[0];
+    if (!product) {
+      return {
+        ok: false,
+        changed: [],
+        errors: { productId: "Pick an item from this client's range." },
+      };
+    }
+
+    /* The database enforces this too -- unique (retailer_id, product_id).
+       Catching it here names the field instead of surfacing a constraint
+       violation, and covers the archived case the constraint cannot: a
+       pairing that was archived still occupies the pair. */
+    const { rows: existingRows } = await client.query<{ id: string; archived_at: Date | null }>(
+      `select id, archived_at from workstream_items
+        where retailer_id = $1 and product_id = $2`,
+      [retailerId, productId],
+    );
+    const existing = existingRows[0];
+    if (existing) {
+      return {
+        ok: false,
+        changed: [],
+        errors: {
+          productId: existing.archived_at
+            ? `${product.name} was worked into ${retailer.name} before and archived.`
+            : `${product.name} is already in the workstream for ${retailer.name}.`,
+        },
+      };
+    }
+
+    /* Ids stay in the readable ws-NN series the rest of the data uses. Two
+       simultaneous creations would collide on the primary key and the second
+       transaction would fail loudly, which is the correct outcome: nothing is
+       silently renumbered. */
+    const { rows: nextIdRows } = await client.query<{ next: string }>(
+      `select 'ws-' || lpad((coalesce(max(substring(id from 4)::integer), 0) + 1)::text, 2, '0') as next
+         from workstream_items where id ~ '^ws-[0-9]+$'`,
+    );
+    const id = nextIdRows[0].next;
+
+    /* current_target and item_status are left to their column defaults rather
+       than named here, so the schema stays the single answer to what a new
+       pairing starts as. */
+    await client.query(
+      `insert into workstream_items
+         (id, retailer_id, product_id, broker_id, owner_id, display_order)
+       values ($1, $2, $3, $4, $4,
+               (select coalesce(max(display_order), 0) + 1 from workstream_items))`,
+      [id, retailerId, productId, retailer.assigned_broker_id],
+    );
+
+    return {
+      ok: true,
+      errors: {},
+      changed: [`${product.name} added to ${retailer.name}`],
+      id,
     };
   });
 
