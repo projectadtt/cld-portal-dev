@@ -12,15 +12,9 @@ import { ActionList } from "@/components/shared/ActionList";
 import { ActivityTimeline } from "@/components/shared/ActivityTimeline";
 import { cn } from "@/lib/cn";
 import { loadWorkspace } from "@/lib/db/workspace";
-import { getAllProductIds, getProductDetail } from "@/lib/selectors";
+import { getProductDetail } from "@/lib/selectors";
 import { itemStatusTone } from "@/lib/status";
 import { Lightbulb } from "lucide-react";
-
-/** All ten products are known at build time. */
-export async function generateStaticParams() {
-  await loadWorkspace();
-  return getAllProductIds().map((productId) => ({ productId }));
-}
 
 export async function generateMetadata({
   params,

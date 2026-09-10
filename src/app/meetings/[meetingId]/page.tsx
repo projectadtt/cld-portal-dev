@@ -10,16 +10,9 @@ import { ActivityTimeline } from "@/components/shared/ActivityTimeline";
 import { loadWorkspace } from "@/lib/db/workspace";
 import {
   formatLongDate,
-  getAllMeetingIds,
   getMeetingDetail,
   relativeDateLabel,
 } from "@/lib/selectors";
-
-/** All seven meetings are known at build time. */
-export async function generateStaticParams() {
-  await loadWorkspace();
-  return getAllMeetingIds().map((meetingId) => ({ meetingId }));
-}
 
 export async function generateMetadata({
   params,

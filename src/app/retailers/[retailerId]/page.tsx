@@ -15,7 +15,7 @@ import { RetailerTimeline } from "@/components/retailer/RetailerTimeline";
 import { ActionList } from "@/components/shared/ActionList";
 import { ActivityTimeline } from "@/components/shared/ActivityTimeline";
 import { loadWorkspace } from "@/lib/db/workspace";
-import { getAllRetailerIds, getRetailerDetail } from "@/lib/selectors";
+import { getRetailerDetail } from "@/lib/selectors";
 
 /** How much history the overview carries before handing off to the tab. */
 const TIMELINE_PREVIEW = 5;
@@ -26,12 +26,6 @@ const TIMELINE_PREVIEW = 5;
  * rather than as four sections that happen to be beside each other.
  */
 const BAND = "grid gap-12 lg:grid-cols-[0.85fr_1fr] lg:gap-16";
-
-/** All nine accounts are known at build time. */
-export async function generateStaticParams() {
-  await loadWorkspace();
-  return getAllRetailerIds().map((retailerId) => ({ retailerId }));
-}
 
 export async function generateMetadata({
   params,

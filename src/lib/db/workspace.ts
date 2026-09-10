@@ -634,11 +634,11 @@ const requestSnapshots = cache((): Snapshots => ({
 /**
  * Outside a request there is no React cache to scope to.
  *
- * The scripts under scripts/db call loadWorkspace() directly, and build-time
- * work such as generateStaticParams runs outside a request too. In that case
- * `cache()` does not memoise at all and would hand back a new store on every
- * call, so `workspace()` would never find what `loadWorkspace()` had just put
- * away. This module-level store is used only then.
+ * The scripts under scripts/db call loadWorkspace() directly, outside any
+ * request. In that case `cache()` does not memoise at all and would hand back
+ * a new store on every call, so `workspace()` would never find what
+ * `loadWorkspace()` had just put away. This module-level store is used only
+ * then.
  */
 const processSnapshots: Snapshots = { loaded: new Map(), loading: new Map() };
 

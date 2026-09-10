@@ -17,17 +17,10 @@ import { ActivityTimeline } from "@/components/shared/ActivityTimeline";
 import { cn } from "@/lib/cn";
 import {
   countBrokerRecords,
-  getAllBrokerIds,
   getBrokerDetail,
   getBrokerRecords,
   type BrokerRecordView,
 } from "@/lib/selectors";
-
-/** All three brokers are known at build time. */
-export async function generateStaticParams() {
-  await loadWorkspace();
-  return getAllBrokerIds().map((brokerId) => ({ brokerId }));
-}
 
 export async function generateMetadata({
   params,

@@ -22,6 +22,23 @@ const instrumentSans = Instrument_Sans({
   display: "swap",
 });
 
+/**
+ * Every screen in the portal is rendered per request, and says so.
+ *
+ * The layout below reads the session cookie, which makes this true whether or
+ * not it is declared — but declaring it is what stops Next from ever *trying*
+ * to prerender a route underneath it. That attempt is not hypothetical: a
+ * detail route carrying `generateStaticParams` was filed as ISR whenever its
+ * table happened to be empty at build time, and the first request for an
+ * unknown id then ran on-demand static generation, where `cookies()` throws
+ * `DYNAMIC_SERVER_USAGE`. The same commit behaved differently depending on
+ * what was in the database when it was built.
+ *
+ * A portal that is private cannot be prerendered. This states that once, in
+ * the one place every route inherits from.
+ */
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata(): Promise<Metadata> {
   /* The client's name is not something a visitor should be able to read off a
      browser tab without signing in. */

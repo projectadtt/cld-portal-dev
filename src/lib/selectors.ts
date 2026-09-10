@@ -264,7 +264,10 @@ export function getOwnerName(ownerId: OwnerId): string {
   return d.brokersById[ownerId]?.shortName ?? "Unassigned";
 }
 
-/** Every retailer id — for generateStaticParams on the detail route. */
+/**
+ * Every retailer id. Not used by a route: the portal is cookie-gated, so no
+ * detail page can be prerendered. Kept for scripts and future export work.
+ */
 export function getAllRetailerIds(): RetailerId[] {
   return d.retailers.map((r) => r.id);
 }
@@ -1006,7 +1009,10 @@ const SUPERSEDED_BY_MEETING: readonly ActivityType[] = [
   "Call",
 ];
 
-/** Every meeting id — for generateStaticParams on the detail route. */
+/**
+ * Every meeting id. Not used by a route: the portal is cookie-gated, so no
+ * detail page can be prerendered. Kept for scripts and future export work.
+ */
 export function getAllMeetingIds(): string[] {
   return d.meetings.map((m) => m.id);
 }
@@ -1316,7 +1322,10 @@ export function groupActivityByDay(list: Activity[]): ActivityDay[] {
 
 /* ── Products ──────────────────────────────────────────────────────────── */
 
-/** Every product id — for generateStaticParams on the detail route. */
+/**
+ * Every product id. Not used by a route: the portal is cookie-gated, so no
+ * detail page can be prerendered. Kept for scripts and future export work.
+ */
 export function getAllProductIds(): ProductId[] {
   return d.products.map((p) => p.id);
 }
@@ -1789,7 +1798,10 @@ export function countRetailers(filter: RetailerFilter = {}): number {
 
 /* ── Brokers ───────────────────────────────────────────────────────────── */
 
-/** Every broker id — for generateStaticParams on the detail route. */
+/**
+ * Every broker id. Not used by a route: the portal is cookie-gated, so no
+ * detail page can be prerendered. Kept for scripts and future export work.
+ */
 export function getAllBrokerIds(): BrokerId[] {
   return d.brokers.map((b) => b.id);
 }
