@@ -27,7 +27,9 @@
     "db:sparse": "node scripts/db/write/sparse.mjs",
     "db:status-edit": "node scripts/db/write/status.mjs",
     "db:items": "node scripts/db/write/items.mjs",
-    "db:feedback-order": "node --import ./scripts/db/alias.mjs scripts/db/write/feedback-order.mjs"
+    "db:feedback-order": "node --import ./scripts/db/alias.mjs scripts/db/write/feedback-order.mjs",
+    "db:meetings-nullable": "node --import ./scripts/db/alias.mjs scripts/db/write/meetings-nullable.mjs",
+    "db:meeting-create": "node --import ./scripts/db/alias.mjs scripts/db/write/meeting-create.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.42.0",

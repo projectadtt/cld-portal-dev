@@ -2,8 +2,10 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { BrokerName } from "@/components/primitives/BrokerName";
 import { SectionHeader } from "@/components/primitives/SectionHeader";
 import { SectionLink } from "@/components/primitives/SectionLink";
+import { StatusBadge } from "@/components/primitives/StatusBadge";
 import { RetailerItems } from "@/components/retailer/RetailerItems";
 import { ActionList } from "@/components/shared/ActionList";
 import { ActivityTimeline } from "@/components/shared/ActivityTimeline";
@@ -13,6 +15,7 @@ import {
   getMeetingDetail,
   relativeDateLabel,
 } from "@/lib/selectors";
+import { meetingRecordTone } from "@/lib/status";
 
 export async function generateMetadata({
   params,
@@ -77,17 +80,28 @@ export default async function MeetingDetailPage({
                 ? " · " + relativeDateLabel(meeting.date)
                 : "") +
               " · "}
-            <Link
-              href={"/brokers/" + broker.id}
-              className="transition-colors hover:text-forest"
-            >
-              {broker.name}
-            </Link>
+            {/* The one primitive that answers for a meeting nobody is
+                recorded against, rather than linking to a broker that is
+                not there. */}
+            <BrokerName broker={broker} />
           </p>
 
-          <p className="type-label mt-2">
-            {"In the room · " + meeting.attendees.join(", ")}
+          {/* What became of the meeting, in the same dot-and-word the rest of
+              the portal uses. Read from the record, not inferred from its
+              date: a meeting that has passed without being written up is still
+              Scheduled, and saying otherwise would be a claim nobody made. */}
+          <p className="mt-3.5">
+            <StatusBadge
+              label={meeting.status}
+              tone={meetingRecordTone[meeting.status]}
+            />
           </p>
+
+          {meeting.attendees.length > 0 ? (
+            <p className="type-label mt-2">
+              {"In the room · " + meeting.attendees.join(", ")}
+            </p>
+          ) : null}
         </div>
       </header>
 
@@ -99,9 +113,18 @@ export default async function MeetingDetailPage({
               title="Meeting notes"
               description="What was actually said in the room."
             />
-            <p className="max-w-[62ch] text-[15px] leading-relaxed text-ink">
-              {meeting.summary}
-            </p>
+            {/* A meeting can be on the book before anybody writes it up. The
+                heading stays, because the absence is the point; nothing is
+                invented to fill the space. */}
+            {meeting.summary ? (
+              <p className="max-w-[62ch] text-[15px] leading-relaxed text-ink">
+                {meeting.summary}
+              </p>
+            ) : (
+              <p className="text-sm text-ink-faint">
+                Nothing was written up from this meeting.
+              </p>
+            )}
           </section>
 
           {/* Only rendered when the record actually settled something. */}

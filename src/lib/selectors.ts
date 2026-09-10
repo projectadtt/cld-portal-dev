@@ -35,6 +35,7 @@ import {
   ITEM_STATUSES,
   PIPELINE_PHASES,
   isConversation,
+  isHeldMeeting,
   isOpenAction,
   isApproved,
   isPitched,
@@ -300,6 +301,18 @@ function brokerFor(retailer: Retailer): Broker | undefined {
 }
 
 /**
+ * The same question asked of a meeting: who ran it, which may be nobody.
+ *
+ * meetings.broker_id is nullable for the same reason — ON DELETE SET NULL —
+ * so a held meeting outlives the broker who held it.
+ */
+function brokerOf(meeting: Meeting): Broker | undefined {
+  return meeting.brokerId === undefined
+    ? undefined
+    : d.brokersById[meeting.brokerId];
+}
+
+/**
  * Every retailer id. Not used by a route: the portal is cookie-gated, so no
  * detail page can be prerendered. Kept for scripts and future export work.
  */
@@ -329,8 +342,18 @@ export function getRetailerActions(retailerId: RetailerId): Action[] {
   return d.actions.filter((a) => a.retailerId === retailerId).sort(byDueAsc);
 }
 
+/**
+ * Meetings actually held on this account, most recent first.
+ *
+ * Held, not every meeting: the notes panel, the account timeline and
+ * `getLastMeeting` all ask what was said, and a meeting still on the book has
+ * said nothing. The read layer now carries scheduled meetings too, so the
+ * distinction is made here rather than in the query.
+ */
 export function getRetailerMeetings(retailerId: RetailerId): Meeting[] {
-  return d.meetings.filter((m) => m.retailerId === retailerId).sort(byDateDesc);
+  return d.meetings
+    .filter((m) => m.retailerId === retailerId && isHeldMeeting(m.status))
+    .sort(byDateDesc);
 }
 
 /** A meeting flattened for the notes panel on the retailer page. */
@@ -338,8 +361,10 @@ export interface RetailerNote {
   id: string;
   date: string;
   title: string;
-  authorId: OwnerId;
-  body: string;
+  /** Absent where the meeting records no broker. */
+  authorId?: OwnerId;
+  /** Absent where nothing was written up. */
+  body?: string;
 }
 
 export function getRetailerNotes(retailerId: RetailerId): RetailerNote[] {
@@ -1074,9 +1099,30 @@ export function getAllMeetingIds(): string[] {
   return d.meetings.map((m) => m.id);
 }
 
-/** Every meeting held, most recent first. */
+/**
+ * Every meeting held, most recent first — what the Past tab is.
+ *
+ * Completed only. A cancelled meeting was never held, so it is not a record of
+ * anything that was said, and "Past meetings" is where the portal keeps what
+ * was said. Nothing can reach that state through the portal yet; see the
+ * cancellation workflow, which is deliberately not built.
+ */
 export function getMeetings(): Meeting[] {
-  return [...d.meetings].sort(byDateDesc);
+  return d.meetings.filter((m) => isHeldMeeting(m.status)).sort(byDateDesc);
+}
+
+/**
+ * Meetings on the book and not yet held — what the Upcoming tab is built from.
+ *
+ * Soonest first, and deliberately not filtered by date. A scheduled meeting
+ * whose day has passed is still outstanding: nobody has written it up, and no
+ * other list would show it, so excluding it would make the record vanish from
+ * the portal entirely. It stays here until someone records what happened.
+ */
+export function getScheduledMeetings(): Meeting[] {
+  return d.meetings
+    .filter((m) => m.status === "Scheduled")
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 }
 
 /** Returns null for an unknown id so the route can call notFound(). */
@@ -1104,7 +1150,8 @@ function followThrough(retailerId: RetailerId): MeetingFollowThrough {
 export interface MeetingSummary {
   meeting: Meeting;
   retailer: Retailer;
-  broker: Broker;
+  /** Absent where the meeting records no broker. */
+  broker?: Broker;
   followThrough: MeetingFollowThrough;
 }
 
@@ -1112,7 +1159,7 @@ export function getMeetingSummaries(): MeetingSummary[] {
   return getMeetings().map((meeting) => ({
     meeting,
     retailer: d.retailersById[meeting.retailerId],
-    broker: d.brokersById[meeting.brokerId],
+    broker: brokerOf(meeting),
     followThrough: followThrough(meeting.retailerId),
   }));
 }
@@ -1120,11 +1167,14 @@ export function getMeetingSummaries(): MeetingSummary[] {
 /**
  * A meeting that has not happened yet.
  *
- * These are not meeting records — a meeting only becomes one once it has been
- * held and there is something to write down. What is on the books lives on the
- * retailer, as meetingStatus, so that is where this is read from. Nothing here
- * is scheduled by the portal, and no date is inferred: an account that asked
- * for a meeting without fixing a day says exactly that.
+ * Two sources, and the difference between them is real. A row carrying
+ * `meeting` is an actual record on the book, scheduled through the portal and
+ * openable. A row without one is the account's own planning field — an
+ * intention recorded against the retailer, with no meeting behind it — which
+ * is what this list was built from before meetings could be created at all.
+ *
+ * No date is inferred either way: an account that asked for a meeting without
+ * fixing a day says exactly that.
  */
 export interface UpcomingMeeting {
   retailer: Retailer;
@@ -1137,14 +1187,42 @@ export interface UpcomingMeeting {
   lastMeeting?: Meeting;
   /** Tracked work still outstanding going into it. */
   openActions: Action[];
+  /** The record itself, where one exists. Absent for a planning-only row. */
+  meeting?: Meeting;
 }
 
 const UPCOMING_STATUSES: readonly MeetingStatus[] = ["Scheduled", "Requested"];
 
-/** Dated meetings first, soonest first; undated requests after them. */
+/**
+ * What is still to come: real scheduled meetings, then accounts whose only
+ * plan is the retailer's own field.
+ *
+ * The planning fallback is kept rather than removed — `next_meeting_status`
+ * and `next_meeting_at` are still in the schema and still read, so dropping
+ * them here would be a silent behaviour change on a field this step is not
+ * meant to touch. It is suppressed per account once a real meeting exists, so
+ * the same conversation is never listed twice.
+ *
+ * Dated rows first, soonest first; undated requests after them.
+ */
 export function getUpcomingMeetings(): UpcomingMeeting[] {
-  return d.retailers
-    .filter((r) => UPCOMING_STATUSES.includes(r.meetingStatus))
+  const scheduled = getScheduledMeetings();
+  const booked = new Set(scheduled.map((m) => m.retailerId));
+
+  const fromMeetings: UpcomingMeeting[] = scheduled.map((meeting) => ({
+    retailer: d.retailersById[meeting.retailerId],
+    broker: brokerOf(meeting),
+    status: "Scheduled",
+    date: meeting.date,
+    lastMeeting: getRetailerMeetings(meeting.retailerId)[0],
+    openActions: followThrough(meeting.retailerId).openActions,
+    meeting,
+  }));
+
+  const fromPlanning: UpcomingMeeting[] = d.retailers
+    .filter(
+      (r) => UPCOMING_STATUSES.includes(r.meetingStatus) && !booked.has(r.id),
+    )
     .map((retailer) => ({
       retailer,
       broker: brokerFor(retailer),
@@ -1152,7 +1230,9 @@ export function getUpcomingMeetings(): UpcomingMeeting[] {
       date: retailer.meetingDate,
       lastMeeting: getRetailerMeetings(retailer.id)[0],
       openActions: followThrough(retailer.id).openActions,
-    }))
+    }));
+
+  return [...fromMeetings, ...fromPlanning]
     .sort((a, b) => {
       if (a.date && b.date) return a.date.localeCompare(b.date);
       if (a.date) return -1;
@@ -1164,7 +1244,8 @@ export function getUpcomingMeetings(): UpcomingMeeting[] {
 export interface MeetingDetail {
   meeting: Meeting;
   retailer: Retailer;
-  broker: Broker;
+  /** Absent where the meeting records no broker. */
+  broker?: Broker;
   /** Tracked work outstanding on the account this meeting was about. */
   openActions: Action[];
   /** The account's Item x Retailer records, so the meeting lands in the work. */
@@ -1188,7 +1269,7 @@ export function getMeetingDetail(id: string): MeetingDetail | null {
   return {
     meeting,
     retailer: d.retailersById[meeting.retailerId],
-    broker: d.brokersById[meeting.brokerId],
+    broker: brokerOf(meeting),
     openActions: followThrough(meeting.retailerId).openActions,
     items: getRetailerItemRows(meeting.retailerId),
     activities: getRetailerActivities(meeting.retailerId).filter(
@@ -2080,7 +2161,8 @@ export function getBrokerNotes(brokerId: BrokerId): RetailerNote[] {
       id: m.id,
       date: m.date,
       title: m.title,
-      authorId: m.brokerId,
+      /* The filter above is the proof: every row here is this broker's. */
+      authorId: brokerId,
       body: m.summary,
     }));
 }

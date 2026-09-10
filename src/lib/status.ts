@@ -264,6 +264,39 @@ export const MEETING_STATUSES = [
 
 export type MeetingStatus = (typeof MEETING_STATUSES)[number];
 
+/**
+ * The status a meeting record itself carries. Mirrors lookup_meeting_status.
+ *
+ * Deliberately not MEETING_STATUSES above. That one is the account-level
+ * outlook — it adds "Not scheduled", "Requested" and "Follow-up needed", none
+ * of which the meetings table can hold, and it lacks "Cancelled", which it
+ * can. Two questions, two vocabularies: what is happening with this account,
+ * and what became of this meeting. Keeping them apart is what stops a select
+ * offering a value the lookup table would refuse.
+ */
+export const MEETING_RECORD_STATUSES = [
+  "Scheduled",
+  "Completed",
+  "Cancelled",
+] as const;
+
+export type MeetingRecordStatus = (typeof MEETING_RECORD_STATUSES)[number];
+
+/**
+ * What the create form offers, which is not the whole vocabulary.
+ *
+ * A meeting is booked or it is being written up after the fact. Nobody
+ * records a meeting that was already cancelled — cancelling is something
+ * that happens to a meeting already on the book, and that workflow does not
+ * exist yet. The write path accepts all three; only the form narrows.
+ */
+export const MEETING_CREATE_STATUSES = ["Scheduled", "Completed"] as const;
+
+/** A meeting that has actually been held, and so has something to read. */
+export function isHeldMeeting(status: MeetingRecordStatus): boolean {
+  return status === "Completed";
+}
+
 /* ── Action status ─────────────────────────────────────────────────────── */
 
 export const ACTION_STATUSES = ["Open", "In Progress", "Blocked", "Done"] as const;
@@ -402,4 +435,15 @@ export const actionStatusTone: Record<ActionStatus, Tone> = {
   "In Progress": "neutral",
   Blocked: "attention",
   Done: "dormant",
+};
+
+/**
+ * A meeting is not a problem, so none of these is red: a cancelled meeting is
+ * a diary change, not a blocker CLD has failed to clear. Red stays with the
+ * attention layer.
+ */
+export const meetingRecordTone: Record<MeetingRecordStatus, Tone> = {
+  Scheduled: "neutral",
+  Completed: "active",
+  Cancelled: "dormant",
 };

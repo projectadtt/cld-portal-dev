@@ -17,10 +17,11 @@ import {
 /**
  * Meetings still ahead, and what to walk in with.
  *
- * These are not meeting records. A meeting only becomes a record once it has
- * been held and there is something to write down, so what is on the books is
- * read off the account instead — which is also why these rows open the
- * retailer rather than a meeting page.
+ * Two kinds of row, and the difference is visible. A row with a meeting record
+ * behind it names that meeting and opens it. A row without one is the
+ * account's own planning field — an intention recorded against the retailer
+ * with no meeting behind it — and it opens the account, because there is no
+ * record to open.
  *
  * Each row carries the two things worth knowing beforehand: what was decided
  * last time, and what is still outstanding going in.
@@ -37,13 +38,15 @@ export function UpcomingMeetings({ meetings }: { meetings: UpcomingMeeting[] }) 
 
   return (
     <ul>
-      {meetings.map(({ retailer, broker, status, date, lastMeeting, openActions }) => {
+      {meetings.map(({ retailer, broker, status, date, lastMeeting, openActions, meeting }) => {
         const next = openActions[0];
         const overdue = next ? isActionOverdue(next) : false;
 
         return (
           <li
-            key={retailer.id}
+            /* The meeting id where there is one: an account can have two
+               meetings on the book, and keying on the retailer would collide. */
+            key={meeting?.id ?? retailer.id}
             className="grid gap-x-10 gap-y-3 border-t border-rule-soft py-6 first:border-t-0 first:pt-0 lg:grid-cols-[7rem_1fr_1.4fr]"
           >
             <div className="lg:pt-0.5">
@@ -64,12 +67,15 @@ export function UpcomingMeetings({ meetings }: { meetings: UpcomingMeeting[] }) 
             </div>
 
             <div className="min-w-0">
+              {/* The meeting leads where one exists, because that is the
+                  thing being held. Otherwise the account leads, because a
+                  planning row has nothing else to name. */}
               <h3 className="font-display text-[1.0625rem] leading-snug tracking-[-0.005em]">
                 <Link
-                  href={"/retailers/" + retailer.id}
+                  href={meeting ? "/meetings/" + meeting.id : "/retailers/" + retailer.id}
                   className="group inline-flex items-start gap-1.5 text-ink transition-colors hover:text-forest"
                 >
-                  {retailer.name}
+                  {meeting ? meeting.title : retailer.name}
                   <ArrowUpRight
                     size={14}
                     strokeWidth={1.75}
@@ -79,7 +85,18 @@ export function UpcomingMeetings({ meetings }: { meetings: UpcomingMeeting[] }) 
                 </Link>
               </h3>
 
-              <p className="type-label mt-1.5">
+              <p className="type-label mt-1.5 flex flex-wrap gap-x-1.5">
+                {meeting ? (
+                  <>
+                    <Link
+                      href={"/retailers/" + retailer.id}
+                      className="transition-colors hover:text-forest"
+                    >
+                      {retailer.name}
+                    </Link>
+                    <span aria-hidden="true">·</span>
+                  </>
+                ) : null}
                 <BrokerName broker={broker} />
               </p>
 

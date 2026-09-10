@@ -2,9 +2,11 @@ import { ArrowUpRight, CalendarClock } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/primitives/EmptyState";
+import { meta } from "@/lib/cn";
 import {
   formatLongDate,
   relativeDateLabel,
+  UNASSIGNED,
   type MeetingSummary,
 } from "@/lib/selectors";
 
@@ -60,15 +62,24 @@ export function MeetingList({ summaries }: { summaries: MeetingSummary[] }) {
                   className="mt-1 shrink-0 text-ink-faint opacity-0 transition-opacity group-hover:opacity-100"
                 />
               </h3>
+              {/* The whole row is already a link into the record, so the
+                  broker is named rather than linked — BrokerName would nest
+                  an anchor inside one. Same words as everywhere else. */}
               <p className="type-label mt-1.5">
-                {retailer.name + " · " + broker.name}
+                {meta(retailer.name, broker?.name ?? UNASSIGNED)}
               </p>
             </div>
 
             <div className="min-w-0">
-              <p className="max-w-[58ch] text-sm leading-relaxed text-ink-muted">
-                {meeting.summary}
-              </p>
+              {meeting.summary ? (
+                <p className="max-w-[58ch] text-sm leading-relaxed text-ink-muted">
+                  {meeting.summary}
+                </p>
+              ) : (
+                <p className="text-sm leading-relaxed text-ink-faint">
+                  Nothing written up yet.
+                </p>
+              )}
 
               <p className="type-label mt-2.5">
                 {(meeting.decisions.length === 1

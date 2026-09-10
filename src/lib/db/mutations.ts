@@ -3,7 +3,12 @@ import "server-only";
 import { withTransaction } from "./pool";
 import { DEFAULT_CLIENT_ID, resetWorkspace, storedPipelineStatus } from "./workspace";
 import { DEMO_TODAY } from "@/lib/demo";
-import { PIPELINE_STATUSES, type PipelineStatus } from "@/lib/status";
+import {
+  MEETING_RECORD_STATUSES,
+  PIPELINE_STATUSES,
+  type MeetingRecordStatus,
+  type PipelineStatus,
+} from "@/lib/status";
 import {
   putAsset,
   removeAsset,
@@ -106,7 +111,8 @@ async function inLookup(
     | "lookup_tier"
     | "lookup_priority"
     | "lookup_fit"
-    | "lookup_standing",
+    | "lookup_standing"
+    | "lookup_meeting_status",
   value: string,
 ): Promise<boolean> {
   const { rowCount } = await client.query(
@@ -1447,6 +1453,144 @@ export async function createWorkstreamItem(
       ok: true,
       errors: {},
       changed: [`${product.name} added to ${retailer.name}`],
+      id,
+    };
+  });
+
+  if (result.ok) resetWorkspace(clientId);
+  return result;
+}
+
+/* ── Meetings ──────────────────────────────────────────────────────────── */
+
+/** What the new-meeting form says. The account comes from the route. */
+export interface MeetingDraft {
+  title: string;
+  /** ISO calendar day, yyyy-mm-dd. */
+  scheduledOn: string;
+  /** Optional HH:MM, 24-hour. Empty means the day is agreed and the hour is not. */
+  scheduledTime: string;
+  /** lookup_meeting_status. The form offers two of the three. */
+  status: string;
+}
+
+const HH_MM = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+/**
+ * Putting one meeting on the book.
+ *
+ * The first write the meetings table has ever had. What it records is
+ * deliberately thin: which account, when, what it is called, and whether it is
+ * still to come or already happened. What was *said* is not here — a meeting
+ * being booked has no notes, and a meeting being written up after the fact
+ * gets its notes through the edit path, which does not exist yet.
+ *
+ * Four things it does not touch, each for its own reason:
+ *
+ *   summary, decisions   left to NULL and the column default. Nobody has said
+ *                        anything yet, and an empty string is not the same
+ *                        claim as "nothing recorded".
+ *   location             out of scope; the read layer does not select it.
+ *   activities           the history spine has no write path at all yet, and
+ *                        giving it one here would be inventing half of it.
+ *   meeting_attendees    who was in the room needs contacts first.
+ *
+ * It also leaves `retailers.next_meeting_status` and `next_meeting_at` alone.
+ * Those are the account's own planning fields; a real meeting record now
+ * supersedes them in the Upcoming list, but rewriting them from here would be
+ * a second source of truth writing over the first.
+ */
+export async function createMeeting(
+  retailerId: string,
+  draft: MeetingDraft,
+  clientId: string = DEFAULT_CLIENT_ID,
+): Promise<CreateResult> {
+  const result = await withTransaction<CreateResult>(async (client): Promise<CreateResult> => {
+    const errors: FieldErrors = {};
+
+    const title = draft.title.trim();
+    const scheduledOn = draft.scheduledOn.trim();
+    const scheduledTime = draft.scheduledTime.trim();
+    const status = draft.status.trim();
+
+    if (!title) errors.title = "A meeting needs a name.";
+    else if (title.length > 160) errors.title = "Keep the title to a line.";
+
+    if (!scheduledOn) errors.scheduledOn = "Say which day.";
+    else if (notADate(scheduledOn)) errors.scheduledOn = "Needs a real date.";
+
+    /* Optional, because a day is often agreed before an hour is. When it is
+       absent the timestamp lands on midnight UTC rather than on a plausible
+       business hour: the read layer shows the day only, and a made-up 9am
+       would be a fact nobody supplied. */
+    if (scheduledTime && !HH_MM.test(scheduledTime)) {
+      errors.scheduledTime = "Use a 24-hour time, like 14:30.";
+    }
+
+    /* Validated twice, like the pipeline status: once against the vocabulary
+       this application can render, and once against the lookup table, which is
+       the authority. A value in the table that the portal cannot render is
+       still refused. */
+    if (!MEETING_RECORD_STATUSES.includes(status as MeetingRecordStatus)) {
+      errors.status = "Pick a status the portal knows how to show.";
+    } else if (!(await inLookup(client, "lookup_meeting_status", status))) {
+      errors.status = "That status is not in the database's vocabulary.";
+    }
+
+    /* The account comes from the route, but it is still checked here: a server
+       action is a POST endpoint of its own, and the route segment is as much a
+       request input as a form field is. */
+    const { rows: retailerRows } = await client.query<{
+      id: string; name: string; assigned_broker_id: string | null;
+    }>(
+      `select id, name, assigned_broker_id from retailers
+        where id = $1 and client_id = $2 and archived_at is null`,
+      [retailerId, clientId],
+    );
+    const retailer = retailerRows[0];
+    if (!retailer) {
+      return {
+        ok: false,
+        changed: [],
+        errors: { form: "That account is not on this client's book." },
+      };
+    }
+
+    if (Object.keys(errors).length > 0) return { ok: false, changed: [], errors };
+
+    /* Ids stay in the readable mtg-NN series the rest of the data uses. Two
+       simultaneous creations would collide on the primary key and the second
+       transaction would fail loudly, which is the correct outcome: nothing is
+       silently renumbered. */
+    const { rows: nextIdRows } = await client.query<{ next: string }>(
+      `select 'mtg-' || lpad((coalesce(max(substring(id from 5)::integer), 0) + 1)::text, 2, '0') as next
+         from meetings where id ~ '^mtg-[0-9]+$'`,
+    );
+    const id = nextIdRows[0].next;
+
+    /* Composed as UTC so the day reads back as the day that was entered. The
+       read layer casts through `at time zone 'UTC'`, so anything else would
+       shift the date for half the world. */
+    const scheduledAt = `${scheduledOn} ${scheduledTime || "00:00"}:00+00`;
+
+    /* The broker is inherited, not chosen: a meeting on an account is run by
+       whoever carries that account. Null where nobody does — the column is
+       nullable and the read layer now says "Unassigned" rather than breaking.
+       summary and decisions are left to NULL and the column default. */
+    await client.query(
+      `insert into meetings (id, retailer_id, scheduled_at, title, status, broker_id)
+       values ($1, $2, $3::timestamptz, $4, $5, $6)`,
+      [id, retailerId, scheduledAt, title, status, retailer.assigned_broker_id],
+    );
+
+    return {
+      ok: true,
+      errors: {},
+      changed: [
+        status === "Scheduled"
+          ? `${title} put on the book for ${retailer.name}`
+          : `${title} recorded against ${retailer.name}`,
+      ],
       id,
     };
   });

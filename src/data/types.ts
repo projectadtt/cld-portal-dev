@@ -21,6 +21,7 @@ import type {
   CurrentTarget,
   Fit,
   ItemStatus,
+  MeetingRecordStatus,
   MeetingStatus,
   PipelineStatus,
   RetailReadiness,
@@ -280,10 +281,26 @@ export interface Meeting {
   date: string;
   title: string;
   retailerId: RetailerId;
-  brokerId: BrokerId;
+  /**
+   * Absent while nobody is recorded as having run it.
+   *
+   * meetings.broker_id is nullable and ON DELETE SET NULL, so removing a
+   * broker empties this on every meeting they held. The conversation still
+   * happened; only the name against it is gone.
+   */
+  brokerId?: BrokerId;
   attendees: string[];
-  summary: string;
+  /** Absent until somebody has written up what was said. */
+  summary?: string;
   decisions: string[];
+  /**
+   * What became of the meeting: Scheduled, Completed or Cancelled.
+   *
+   * The meeting's own answer, and the one the Past/Upcoming split is drawn
+   * from. Not the same question as `Retailer.meetingStatus`, which is the
+   * account's wider outlook.
+   */
+  status: MeetingRecordStatus;
   actions: string[];
 }
 

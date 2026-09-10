@@ -30,7 +30,9 @@ import {
   ACTIVITY_TYPES,
   CURRENT_TARGET_VALUES,
   FIT_LEVELS,
+  isHeldMeeting,
   ITEM_STATUSES,
+  MEETING_RECORD_STATUSES,
   MEETING_STATUSES,
   PIPELINE_STATUSES,
   PRIORITIES,
@@ -167,9 +169,13 @@ type ActionRow = {
   owner_id: string; due: string; status: string; workstream_item_id: string | null;
   meeting_id: string | null;
 };
+/* broker_id and summary are both nullable: the key is ON DELETE SET NULL, so
+   removing a broker empties it on every meeting they ran, and a meeting can be
+   on the book before anybody has written up what was said. */
 type MeetingRow = {
   id: string; scheduled_on: string; title: string; retailer_id: string;
-  broker_id: string; summary: string; decisions: string[];
+  broker_id: string | null; summary: string | null; decisions: string[];
+  status: string;
 };
 type ActivityRow = {
   id: string; occurred_on: string; type: string; retailer_id: string;
@@ -263,10 +269,14 @@ async function load(clientId: string): Promise<Workspace> {
          from contacts c join retailers r on r.id = c.retailer_id
         where r.client_id = $1 and c.archived_at is null`, [clientId]),
     () => query<MeetingRow>(
+      /* Every meeting, whatever became of it. This used to read only the
+         completed ones, which meant a scheduled meeting could not be seen at
+         all — the status was spent as a predicate and then thrown away.
+         It is a field now, and the selectors decide what each screen shows. */
       `select m.id, (m.scheduled_at at time zone 'UTC')::date::text as scheduled_on, m.title,
-              m.retailer_id, m.broker_id, m.summary, m.decisions
+              m.retailer_id, m.broker_id, m.summary, m.decisions, m.status
          from meetings m join retailers r on r.id = m.retailer_id
-        where r.client_id = $1 and m.status = 'Completed'
+        where r.client_id = $1
         order by m.scheduled_at desc`, [clientId]),
     () => query<{ meeting_id: string; display_name: string }>(
       `select a.meeting_id, a.display_name
@@ -496,10 +506,16 @@ async function load(clientId: string): Promise<Workspace> {
     date: m.scheduled_on,
     title: m.title,
     retailerId: m.retailer_id as RetailerId,
-    brokerId: m.broker_id as BrokerId,
+    /* Absent, not a stand-in: the same treatment retailers.assigned_broker_id
+       gets. A meeting whose broker has been removed names nobody rather than
+       linking to a broker that is not there. */
+    brokerId: (m.broker_id ?? undefined) as BrokerId | undefined,
     attendees: attendeesByMeeting.get(m.id) ?? [],
-    summary: m.summary,
+    summary: m.summary ?? undefined,
     decisions: m.decisions,
+    /* must, not maybe: the column is NOT NULL with a default of Scheduled, and
+       a value outside lookup_meeting_status is a fault worth hearing about. */
+    status: must(MEETING_RECORD_STATUSES, m.status, `meetings.${m.id}.status`),
   }));
 
   /* -- retailers, last, because they roll up everything above ----------- */
@@ -511,8 +527,12 @@ async function load(clientId: string): Promise<Workspace> {
     itemsByRetailer.set(w.retailerId, list);
   }
 
+  /* Held meetings only. The derivation below asks "has this account actually
+     been met", and a meeting merely on the book is not an answer to that —
+     now that the read no longer filters by status, the filter belongs here. */
   const meetingsByRetailer = new Map<string, Meeting[]>();
   for (const m of meetings) {
+    if (!isHeldMeeting(m.status)) continue;
     const list = meetingsByRetailer.get(m.retailerId) ?? [];
     list.push(m);
     meetingsByRetailer.set(m.retailerId, list);

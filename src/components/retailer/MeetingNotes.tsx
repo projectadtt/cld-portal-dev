@@ -30,9 +30,15 @@ export function MeetingNotes({ notes }: { notes: RetailerNote[] }) {
             {formatLongDate(note.date) + " · " + getOwnerName(note.authorId)}
           </p>
           <p className="mt-1.5 text-sm text-ink">{note.title}</p>
-          <p className="mt-2 text-[15px] leading-relaxed text-ink-muted">
-            {note.body}
-          </p>
+          {note.body ? (
+            <p className="mt-2 text-[15px] leading-relaxed text-ink-muted">
+              {note.body}
+            </p>
+          ) : (
+            <p className="mt-2 text-sm text-ink-faint">
+              Nothing was written up from this meeting.
+            </p>
+          )}
         </li>
       ))}
     </ul>

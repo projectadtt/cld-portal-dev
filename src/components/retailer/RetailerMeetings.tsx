@@ -53,9 +53,15 @@ export function RetailerMeetings({ meetings }: { meetings: Meeting[] }) {
             </Link>
           </h3>
 
-          <p className="mt-3 max-w-[68ch] text-[15px] leading-relaxed text-ink-muted">
-            {meeting.summary}
-          </p>
+          {meeting.summary ? (
+            <p className="mt-3 max-w-[68ch] text-[15px] leading-relaxed text-ink-muted">
+              {meeting.summary}
+            </p>
+          ) : (
+            <p className="mt-3 text-sm text-ink-faint">
+              Nothing was written up from this meeting.
+            </p>
+          )}
 
           {meeting.decisions.length > 0 ? (
             <div className="mt-5">

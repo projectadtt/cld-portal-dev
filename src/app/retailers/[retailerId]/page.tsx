@@ -160,6 +160,13 @@ export default async function RetailerDetailPage({
           <SectionHeader
             title="Meeting notes"
             description="What was actually said in the room, and what was decided."
+            action={
+              <SectionLink
+                href={"/retailers/" + retailer.id + "/meetings/new"}
+              >
+                Add a meeting
+              </SectionLink>
+            }
           />
           <RetailerMeetings meetings={meetings} />
         </section>
