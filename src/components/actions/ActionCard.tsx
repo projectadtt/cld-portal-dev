@@ -119,11 +119,18 @@ export function ActionCard({ row }: { row: ResolvedAction }) {
           {"Due " + formatDueDate(action.due)}
         </p>
 
-        <StatusBadge
-          label={row.overdue ? "Overdue" : action.status}
-          tone={row.overdue ? "attention" : actionStatusTone[action.status]}
-          className="mt-1.5 lg:justify-end"
-        />
+        {/* Block, so it holds its own line. The badge is inline-flex and the
+            link below is inline-block, so as bare siblings the two sat on one
+            line with nothing between them — "Open" the status running
+            straight into "Open" the link — and their margin-top never applied,
+            because vertical margins do not affect an inline-level line box.
+            Right alignment comes from the column's own lg:text-right. */}
+        <p className="mt-1.5">
+          <StatusBadge
+            label={row.overdue ? "Overdue" : action.status}
+            tone={row.overdue ? "attention" : actionStatusTone[action.status]}
+          />
+        </p>
 
         {/* The way into the action workspace, where this record is worked.
             One quiet word: the list is read far more often than it is
