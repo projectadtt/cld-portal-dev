@@ -1,0 +1,537 @@
+table actions
+  column completed_at timestamp with time zone
+  column created_at timestamp with time zone not null default now()
+  column description text
+  column display_order integer
+  column due date
+  column id text not null
+  column label text not null
+  column meeting_id text
+  column owner_id text not null
+  column product_id text
+  column retailer_id text not null
+  column status text not null default 'Open'::text
+  column updated_at timestamp with time zone not null default now()
+  column workstream_item_id text
+  foreign key FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE SET NULL
+  foreign key FOREIGN KEY (owner_id) REFERENCES brokers(id) ON DELETE RESTRICT
+  foreign key FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+  foreign key FOREIGN KEY (retailer_id) REFERENCES retailers(id) ON DELETE CASCADE
+  foreign key FOREIGN KEY (status) REFERENCES lookup_action_status(value)
+  foreign key FOREIGN KEY (workstream_item_id) REFERENCES workstream_items(id) ON DELETE SET NULL
+  primary key PRIMARY KEY (id)
+  index CREATE INDEX actions_due_idx ON actions USING btree (due) WHERE (status <> 'Done'::text)
+  index CREATE INDEX actions_item_idx ON actions USING btree (workstream_item_id)
+  index CREATE INDEX actions_meeting_idx ON actions USING btree (meeting_id)
+  index CREATE INDEX actions_owner_idx ON actions USING btree (owner_id)
+  index CREATE INDEX actions_product_idx ON actions USING btree (product_id)
+  index CREATE INDEX actions_retailer_idx ON actions USING btree (retailer_id)
+  index CREATE UNIQUE INDEX actions_pkey ON actions USING btree (id)
+  trigger CREATE TRIGGER actions_touch BEFORE UPDATE ON actions FOR EACH ROW EXECUTE FUNCTION cld_touch_updated_at()
+table activities
+  column created_at timestamp with time zone not null default now()
+  column description text not null
+  column id text not null
+  column is_system boolean not null default false
+  column meeting_id text
+  column occurred_at timestamp with time zone not null
+  column person_id text
+  column product_id text
+  column retailer_id text not null
+  column type text not null
+  column updated_at timestamp with time zone not null default now()
+  column workstream_item_id text
+  foreign key FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE SET NULL
+  foreign key FOREIGN KEY (person_id) REFERENCES brokers(id) ON DELETE SET NULL
+  foreign key FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+  foreign key FOREIGN KEY (retailer_id) REFERENCES retailers(id) ON DELETE CASCADE
+  foreign key FOREIGN KEY (type) REFERENCES lookup_activity_type(value)
+  foreign key FOREIGN KEY (workstream_item_id) REFERENCES workstream_items(id) ON DELETE SET NULL
+  primary key PRIMARY KEY (id)
+  index CREATE INDEX activities_item_idx ON activities USING btree (workstream_item_id)
+  index CREATE INDEX activities_meeting_idx ON activities USING btree (meeting_id)
+  index CREATE INDEX activities_person_idx ON activities USING btree (person_id)
+  index CREATE INDEX activities_product_idx ON activities USING btree (product_id)
+  index CREATE INDEX activities_retailer_idx ON activities USING btree (retailer_id)
+  index CREATE INDEX activities_when_idx ON activities USING btree (occurred_at DESC)
+  index CREATE UNIQUE INDEX activities_pkey ON activities USING btree (id)
+  trigger CREATE TRIGGER activities_no_delete BEFORE DELETE ON activities FOR EACH ROW EXECUTE FUNCTION cld_append_only()
+  trigger CREATE TRIGGER activities_no_update BEFORE UPDATE ON activities FOR EACH ROW EXECUTE FUNCTION cld_append_only()
+table brokers
+  column archived_at timestamp with time zone
+  column client_id text not null
+  column coverage text
+  column created_at timestamp with time zone not null default now()
+  column display_order integer
+  column email text
+  column id text not null
+  column image_path text
+  column initials text
+  column name text not null
+  column phone text
+  column role text
+  column short_name text not null
+  column status text not null default 'Active'::text
+  column updated_at timestamp with time zone not null default now()
+  check CHECK (((image_path IS NULL) OR (image_path ~ '^brokers/[a-z0-9][a-z0-9-]{0,79}/[0-9a-f]{32}\.(jpg|jpeg|png|webp)$'::text)))
+  foreign key FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+  foreign key FOREIGN KEY (status) REFERENCES lookup_broker_status(value)
+  primary key PRIMARY KEY (id)
+  unique UNIQUE (client_id, name)
+  index CREATE INDEX brokers_client_idx ON brokers USING btree (client_id)
+  index CREATE UNIQUE INDEX brokers_client_name_unique ON brokers USING btree (client_id, name)
+  index CREATE UNIQUE INDEX brokers_pkey ON brokers USING btree (id)
+  trigger CREATE TRIGGER brokers_touch BEFORE UPDATE ON brokers FOR EACH ROW EXECUTE FUNCTION cld_touch_updated_at()
+table buyer_feedback
+  column contact_id uuid
+  column created_at timestamp with time zone not null default now()
+  column id uuid not null default gen_random_uuid()
+  column meeting_id text
+  column occurred_at date
+  column quote text not null
+  column recorded_by text
+  column sentiment text
+  column source text
+  column theme text
+  column updated_at timestamp with time zone not null default now()
+  column workstream_item_id text not null
+  foreign key FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL
+  foreign key FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE SET NULL
+  foreign key FOREIGN KEY (recorded_by) REFERENCES brokers(id) ON DELETE SET NULL
+  foreign key FOREIGN KEY (sentiment) REFERENCES lookup_sentiment(value)
+  foreign key FOREIGN KEY (source) REFERENCES lookup_feedback_source(value)
+  foreign key FOREIGN KEY (workstream_item_id) REFERENCES workstream_items(id) ON DELETE CASCADE
+  primary key PRIMARY KEY (id)
+  index CREATE INDEX buyer_feedback_broker_idx ON buyer_feedback USING btree (recorded_by)
+  index CREATE INDEX buyer_feedback_contact_idx ON buyer_feedback USING btree (contact_id)
+  index CREATE INDEX buyer_feedback_item_idx ON buyer_feedback USING btree (workstream_item_id)
+  index CREATE INDEX buyer_feedback_meeting_idx ON buyer_feedback USING btree (meeting_id)
+  index CREATE INDEX buyer_feedback_when_idx ON buyer_feedback USING btree (occurred_at DESC NULLS LAST)
+  index CREATE UNIQUE INDEX buyer_feedback_pkey ON buyer_feedback USING btree (id)
+  trigger CREATE TRIGGER buyer_feedback_no_delete BEFORE DELETE ON buyer_feedback FOR EACH ROW EXECUTE FUNCTION cld_append_only()
+  trigger CREATE TRIGGER buyer_feedback_no_update BEFORE UPDATE ON buyer_feedback FOR EACH ROW EXECUTE FUNCTION cld_append_only()
+table clients
+  column category text
+  column created_at timestamp with time zone not null default now()
+  column id text not null
+  column is_demo boolean not null default false
+  column name text not null
+  column tagline text
+  column updated_at timestamp with time zone not null default now()
+  column workspace text not null
+  primary key PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX clients_pkey ON clients USING btree (id)
+  trigger CREATE TRIGGER clients_touch BEFORE UPDATE ON clients FOR EACH ROW EXECUTE FUNCTION cld_touch_updated_at()
+table contacts
+  column archived_at timestamp with time zone
+  column created_at timestamp with time zone not null default now()
+  column email text
+  column id uuid not null default gen_random_uuid()
+  column is_primary boolean not null default false
+  column name text not null
+  column notes text
+  column phone text
+  column retailer_id text not null
+  column title text
+  column updated_at timestamp with time zone not null default now()
+  foreign key FOREIGN KEY (retailer_id) REFERENCES retailers(id) ON DELETE CASCADE
+  primary key PRIMARY KEY (id)
+  index CREATE INDEX contacts_retailer_idx ON contacts USING btree (retailer_id)
+  index CREATE UNIQUE INDEX contacts_one_primary_per_retailer ON contacts USING btree (retailer_id) WHERE (is_primary AND (archived_at IS NULL))
+  index CREATE UNIQUE INDEX contacts_pkey ON contacts USING btree (id)
+  trigger CREATE TRIGGER contacts_touch BEFORE UPDATE ON contacts FOR EACH ROW EXECUTE FUNCTION cld_touch_updated_at()
+table lookup_action_status
+  column carries_attention boolean not null default false
+  column display_label text not null
+  column is_open boolean not null default true
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_action_status_pkey ON lookup_action_status USING btree (value)
+  index CREATE UNIQUE INDEX lookup_action_status_sort_order_key ON lookup_action_status USING btree (sort_order)
+table lookup_activity_type
+  column display_label text not null
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_activity_type_pkey ON lookup_activity_type USING btree (value)
+  index CREATE UNIQUE INDEX lookup_activity_type_sort_order_key ON lookup_activity_type USING btree (sort_order)
+table lookup_broker_status
+  column display_label text not null
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_broker_status_pkey ON lookup_broker_status USING btree (value)
+  index CREATE UNIQUE INDEX lookup_broker_status_sort_order_key ON lookup_broker_status USING btree (sort_order)
+table lookup_confidence
+  column display_label text not null
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_confidence_pkey ON lookup_confidence USING btree (value)
+  index CREATE UNIQUE INDEX lookup_confidence_sort_order_key ON lookup_confidence USING btree (sort_order)
+table lookup_current_target
+  column display_label text not null
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_current_target_pkey ON lookup_current_target USING btree (value)
+  index CREATE UNIQUE INDEX lookup_current_target_sort_order_key ON lookup_current_target USING btree (sort_order)
+table lookup_feedback_source
+  column display_label text not null
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_feedback_source_pkey ON lookup_feedback_source USING btree (value)
+  index CREATE UNIQUE INDEX lookup_feedback_source_sort_order_key ON lookup_feedback_source USING btree (sort_order)
+table lookup_fit
+  column display_label text not null
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_fit_pkey ON lookup_fit USING btree (value)
+  index CREATE UNIQUE INDEX lookup_fit_sort_order_key ON lookup_fit USING btree (sort_order)
+table lookup_item_status
+  column display_label text not null
+  column is_terminal boolean not null default false
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_item_status_pkey ON lookup_item_status USING btree (value)
+  index CREATE UNIQUE INDEX lookup_item_status_sort_order_key ON lookup_item_status USING btree (sort_order)
+table lookup_meeting_outlook
+  column display_label text not null
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_meeting_outlook_pkey ON lookup_meeting_outlook USING btree (value)
+  index CREATE UNIQUE INDEX lookup_meeting_outlook_sort_order_key ON lookup_meeting_outlook USING btree (sort_order)
+table lookup_meeting_status
+  column display_label text not null
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_meeting_status_pkey ON lookup_meeting_status USING btree (value)
+  index CREATE UNIQUE INDEX lookup_meeting_status_sort_order_key ON lookup_meeting_status USING btree (sort_order)
+table lookup_opportunity_status
+  column display_label text not null
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_opportunity_status_pkey ON lookup_opportunity_status USING btree (value)
+  index CREATE UNIQUE INDEX lookup_opportunity_status_sort_order_key ON lookup_opportunity_status USING btree (sort_order)
+table lookup_opportunity_type
+  column display_label text not null
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_opportunity_type_pkey ON lookup_opportunity_type USING btree (value)
+  index CREATE UNIQUE INDEX lookup_opportunity_type_sort_order_key ON lookup_opportunity_type USING btree (sort_order)
+table lookup_pipeline_status
+  column display_label text not null
+  column is_terminal boolean not null default false
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_pipeline_status_pkey ON lookup_pipeline_status USING btree (value)
+  index CREATE UNIQUE INDEX lookup_pipeline_status_sort_order_key ON lookup_pipeline_status USING btree (sort_order)
+table lookup_priority
+  column display_label text not null
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_priority_pkey ON lookup_priority USING btree (value)
+  index CREATE UNIQUE INDEX lookup_priority_sort_order_key ON lookup_priority USING btree (sort_order)
+table lookup_readiness
+  column display_label text not null
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_readiness_pkey ON lookup_readiness USING btree (value)
+  index CREATE UNIQUE INDEX lookup_readiness_sort_order_key ON lookup_readiness USING btree (sort_order)
+table lookup_sample_status
+  column display_label text not null
+  column is_with_retailer boolean not null default false
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_sample_status_pkey ON lookup_sample_status USING btree (value)
+  index CREATE UNIQUE INDEX lookup_sample_status_sort_order_key ON lookup_sample_status USING btree (sort_order)
+table lookup_sentiment
+  column display_label text not null
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_sentiment_pkey ON lookup_sentiment USING btree (value)
+  index CREATE UNIQUE INDEX lookup_sentiment_sort_order_key ON lookup_sentiment USING btree (sort_order)
+table lookup_standing
+  column counts_as_attention boolean not null default false
+  column display_label text not null
+  column is_terminal boolean not null default false
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_standing_pkey ON lookup_standing USING btree (value)
+  index CREATE UNIQUE INDEX lookup_standing_sort_order_key ON lookup_standing USING btree (sort_order)
+table lookup_tier
+  column display_label text not null
+  column sort_order integer not null
+  column value text not null
+  primary key PRIMARY KEY (value)
+  unique UNIQUE (sort_order)
+  index CREATE UNIQUE INDEX lookup_tier_pkey ON lookup_tier USING btree (value)
+  index CREATE UNIQUE INDEX lookup_tier_sort_order_key ON lookup_tier USING btree (sort_order)
+table meeting_attendees
+  column broker_id text
+  column contact_id uuid
+  column created_at timestamp with time zone not null default now()
+  column display_name text
+  column display_order integer
+  column id uuid not null default gen_random_uuid()
+  column meeting_id text not null
+  column updated_at timestamp with time zone not null default now()
+  check CHECK (((contact_id IS NOT NULL) OR (broker_id IS NOT NULL) OR (display_name IS NOT NULL)))
+  foreign key FOREIGN KEY (broker_id) REFERENCES brokers(id) ON DELETE SET NULL
+  foreign key FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL
+  foreign key FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
+  primary key PRIMARY KEY (id)
+  index CREATE INDEX meeting_attendees_broker_idx ON meeting_attendees USING btree (broker_id)
+  index CREATE INDEX meeting_attendees_contact_idx ON meeting_attendees USING btree (contact_id)
+  index CREATE INDEX meeting_attendees_meeting_idx ON meeting_attendees USING btree (meeting_id)
+  index CREATE INDEX meeting_attendees_order_idx ON meeting_attendees USING btree (meeting_id, display_order)
+  index CREATE UNIQUE INDEX meeting_attendees_pkey ON meeting_attendees USING btree (id)
+  trigger CREATE TRIGGER meeting_attendees_touch BEFORE UPDATE ON meeting_attendees FOR EACH ROW EXECUTE FUNCTION cld_touch_updated_at()
+table meetings
+  column broker_id text
+  column created_at timestamp with time zone not null default now()
+  column decisions ARRAY not null default '{}'::text[]
+  column id text not null
+  column location text
+  column retailer_id text not null
+  column scheduled_at timestamp with time zone not null
+  column status text not null default 'Scheduled'::text
+  column summary text
+  column title text not null
+  column updated_at timestamp with time zone not null default now()
+  foreign key FOREIGN KEY (broker_id) REFERENCES brokers(id) ON DELETE SET NULL
+  foreign key FOREIGN KEY (retailer_id) REFERENCES retailers(id) ON DELETE CASCADE
+  foreign key FOREIGN KEY (status) REFERENCES lookup_meeting_status(value)
+  primary key PRIMARY KEY (id)
+  index CREATE INDEX meetings_broker_idx ON meetings USING btree (broker_id)
+  index CREATE INDEX meetings_retailer_idx ON meetings USING btree (retailer_id)
+  index CREATE INDEX meetings_when_idx ON meetings USING btree (scheduled_at DESC)
+  index CREATE UNIQUE INDEX meetings_pkey ON meetings USING btree (id)
+  trigger CREATE TRIGGER meetings_touch BEFORE UPDATE ON meetings FOR EACH ROW EXECUTE FUNCTION cld_touch_updated_at()
+table opportunities
+  column archived_at timestamp with time zone
+  column client_id text not null
+  column confidence text
+  column created_at timestamp with time zone not null default now()
+  column deferral_reason text
+  column display_order integer
+  column id text not null
+  column recommendation text
+  column recommended_action text
+  column signal text
+  column status text not null default 'Active'::text
+  column title text not null
+  column type text
+  column updated_at timestamp with time zone not null default now()
+  check CHECK (((status <> 'Active'::text) OR ((type IS NOT NULL) AND (confidence IS NOT NULL))))
+  check CHECK (((status <> 'Deferred'::text) OR (deferral_reason IS NOT NULL)))
+  foreign key FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+  foreign key FOREIGN KEY (confidence) REFERENCES lookup_confidence(value)
+  foreign key FOREIGN KEY (status) REFERENCES lookup_opportunity_status(value)
+  foreign key FOREIGN KEY (type) REFERENCES lookup_opportunity_type(value)
+  primary key PRIMARY KEY (id)
+  index CREATE INDEX opportunities_client_idx ON opportunities USING btree (client_id)
+  index CREATE INDEX opportunities_status_idx ON opportunities USING btree (status)
+  index CREATE UNIQUE INDEX opportunities_pkey ON opportunities USING btree (id)
+  trigger CREATE TRIGGER opportunities_touch BEFORE UPDATE ON opportunities FOR EACH ROW EXECUTE FUNCTION cld_touch_updated_at()
+table opportunity_products
+  column created_at timestamp with time zone not null default now()
+  column opportunity_id text not null
+  column product_id text not null
+  foreign key FOREIGN KEY (opportunity_id) REFERENCES opportunities(id) ON DELETE CASCADE
+  foreign key FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+  primary key PRIMARY KEY (opportunity_id, product_id)
+  index CREATE INDEX opportunity_products_product_idx ON opportunity_products USING btree (product_id)
+  index CREATE UNIQUE INDEX opportunity_products_pkey ON opportunity_products USING btree (opportunity_id, product_id)
+table opportunity_retailers
+  column created_at timestamp with time zone not null default now()
+  column opportunity_id text not null
+  column retailer_id text not null
+  foreign key FOREIGN KEY (opportunity_id) REFERENCES opportunities(id) ON DELETE CASCADE
+  foreign key FOREIGN KEY (retailer_id) REFERENCES retailers(id) ON DELETE CASCADE
+  primary key PRIMARY KEY (opportunity_id, retailer_id)
+  index CREATE INDEX opportunity_retailers_retailer_idx ON opportunity_retailers USING btree (retailer_id)
+  index CREATE UNIQUE INDEX opportunity_retailers_pkey ON opportunity_retailers USING btree (opportunity_id, retailer_id)
+table products
+  column archived_at timestamp with time zone
+  column case_pack integer
+  column category text not null
+  column client_id text not null
+  column created_at timestamp with time zone not null default now()
+  column display_order integer
+  column fob_cost numeric(10,2)
+  column id text not null
+  column image_path text
+  column item_id text not null
+  column landed_cost numeric(10,2)
+  column lead_time_days integer
+  column moq integer
+  column name text not null
+  column pack_size text
+  column positioning text
+  column readiness text not null default 'In preparation'::text
+  column source_notes text
+  column spec_notes text
+  column suggested_retail numeric(10,2)
+  column upc character varying(14)
+  column updated_at timestamp with time zone not null default now()
+  check CHECK (((image_path IS NULL) OR (image_path ~ '^products/[a-z0-9][a-z0-9-]{0,79}/[0-9a-f]{32}\.(jpg|jpeg|png|webp)$'::text)))
+  foreign key FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+  foreign key FOREIGN KEY (readiness) REFERENCES lookup_readiness(value)
+  primary key PRIMARY KEY (id)
+  unique UNIQUE (client_id, item_id)
+  index CREATE INDEX products_client_idx ON products USING btree (client_id)
+  index CREATE INDEX products_order_idx ON products USING btree (client_id, display_order)
+  index CREATE UNIQUE INDEX products_client_item_unique ON products USING btree (client_id, item_id)
+  index CREATE UNIQUE INDEX products_pkey ON products USING btree (id)
+  trigger CREATE TRIGGER products_touch BEFORE UPDATE ON products FOR EACH ROW EXECUTE FUNCTION cld_touch_updated_at()
+table retailers
+  column approximate_doors integer
+  column archived_at timestamp with time zone
+  column assigned_broker_id text
+  column assumed_skus integer
+  column attention_reason text
+  column categories ARRAY not null default '{}'::text[]
+  column channel text not null
+  column client_id text not null
+  column created_at timestamp with time zone not null default now()
+  column current_target text not null default 'Target'::text
+  column display_order integer
+  column fit text
+  column geography text
+  column id text not null
+  column image_path text
+  column last_contact date
+  column name text not null
+  column next_action text
+  column next_action_date date
+  column next_meeting_at date
+  column next_meeting_status text
+  column notes text
+  column pipeline_status text not null default 'Not reached out yet'::text
+  column priority text
+  column short_name text not null
+  column source_url text
+  column standing text not null default 'Active'::text
+  column tier text
+  column units_per_store_week numeric(6,2)
+  column updated_at timestamp with time zone not null default now()
+  check CHECK (((approximate_doors IS NULL) OR (approximate_doors >= 0)))
+  check CHECK (((image_path IS NULL) OR (image_path ~ '^retailers/[a-z0-9][a-z0-9-]{0,79}/[0-9a-f]{32}\.(jpg|jpeg|png|webp)$'::text)))
+  foreign key FOREIGN KEY (assigned_broker_id) REFERENCES brokers(id) ON DELETE SET NULL
+  foreign key FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+  foreign key FOREIGN KEY (current_target) REFERENCES lookup_current_target(value)
+  foreign key FOREIGN KEY (fit) REFERENCES lookup_fit(value)
+  foreign key FOREIGN KEY (next_meeting_status) REFERENCES lookup_meeting_outlook(value)
+  foreign key FOREIGN KEY (pipeline_status) REFERENCES lookup_pipeline_status(value)
+  foreign key FOREIGN KEY (priority) REFERENCES lookup_priority(value)
+  foreign key FOREIGN KEY (standing) REFERENCES lookup_standing(value)
+  foreign key FOREIGN KEY (tier) REFERENCES lookup_tier(value)
+  primary key PRIMARY KEY (id)
+  unique UNIQUE (client_id, name)
+  index CREATE INDEX retailers_broker_idx ON retailers USING btree (assigned_broker_id)
+  index CREATE INDEX retailers_client_idx ON retailers USING btree (client_id)
+  index CREATE INDEX retailers_next_meeting_idx ON retailers USING btree (next_meeting_at) WHERE (next_meeting_status IS NOT NULL)
+  index CREATE INDEX retailers_order_idx ON retailers USING btree (client_id, display_order)
+  index CREATE INDEX retailers_standing_idx ON retailers USING btree (standing)
+  index CREATE INDEX retailers_status_idx ON retailers USING btree (pipeline_status)
+  index CREATE UNIQUE INDEX retailers_client_name_unique ON retailers USING btree (client_id, name)
+  index CREATE UNIQUE INDEX retailers_pkey ON retailers USING btree (id)
+  trigger CREATE TRIGGER retailers_touch BEFORE UPDATE ON retailers FOR EACH ROW EXECUTE FUNCTION cld_touch_updated_at()
+table samples
+  column carrier_reference text
+  column created_at timestamp with time zone not null default now()
+  column id uuid not null default gen_random_uuid()
+  column notes text
+  column prepared_at date
+  column quantity integer
+  column received_at date
+  column recipient_contact_id uuid
+  column requested_at date
+  column reviewed_at date
+  column sent_at date
+  column status text not null
+  column updated_at timestamp with time zone not null default now()
+  column workstream_item_id text not null
+  foreign key FOREIGN KEY (recipient_contact_id) REFERENCES contacts(id) ON DELETE SET NULL
+  foreign key FOREIGN KEY (status) REFERENCES lookup_sample_status(value)
+  foreign key FOREIGN KEY (workstream_item_id) REFERENCES workstream_items(id) ON DELETE CASCADE
+  primary key PRIMARY KEY (id)
+  index CREATE INDEX samples_contact_idx ON samples USING btree (recipient_contact_id)
+  index CREATE INDEX samples_item_idx ON samples USING btree (workstream_item_id)
+  index CREATE INDEX samples_sent_idx ON samples USING btree (sent_at DESC)
+  index CREATE UNIQUE INDEX samples_pkey ON samples USING btree (id)
+  trigger CREATE TRIGGER samples_touch BEFORE UPDATE ON samples FOR EACH ROW EXECUTE FUNCTION cld_touch_updated_at()
+table workstream_items
+  column archived_at timestamp with time zone
+  column broker_id text
+  column created_at timestamp with time zone not null default now()
+  column current_target text not null default 'Target'::text
+  column display_order integer
+  column estimated_annual_units integer generated ((((estimated_doors)::numeric * units_per_store_week) * (52)::numeric))::integer
+  column estimated_doors integer
+  column fit text
+  column id text not null
+  column item_status text not null default 'Not pitched'::text
+  column moq integer
+  column next_action text
+  column next_action_date date
+  column notes text
+  column owner_id text
+  column product_id text not null
+  column quoted_cost numeric(10,2)
+  column requested_retail numeric(10,2)
+  column retailer_id text not null
+  column units_per_store_week numeric(6,2)
+  column updated_at timestamp with time zone not null default now()
+  check CHECK (((estimated_doors IS NULL) OR (estimated_doors >= 0)))
+  foreign key FOREIGN KEY (broker_id) REFERENCES brokers(id) ON DELETE SET NULL
+  foreign key FOREIGN KEY (current_target) REFERENCES lookup_current_target(value)
+  foreign key FOREIGN KEY (fit) REFERENCES lookup_fit(value)
+  foreign key FOREIGN KEY (item_status) REFERENCES lookup_item_status(value)
+  foreign key FOREIGN KEY (owner_id) REFERENCES brokers(id) ON DELETE SET NULL
+  foreign key FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT
+  foreign key FOREIGN KEY (retailer_id) REFERENCES retailers(id) ON DELETE CASCADE
+  primary key PRIMARY KEY (id)
+  unique UNIQUE (retailer_id, product_id)
+  index CREATE INDEX workstream_items_broker_idx ON workstream_items USING btree (broker_id)
+  index CREATE INDEX workstream_items_order_idx ON workstream_items USING btree (display_order)
+  index CREATE INDEX workstream_items_owner_idx ON workstream_items USING btree (owner_id)
+  index CREATE INDEX workstream_items_product_idx ON workstream_items USING btree (product_id)
+  index CREATE INDEX workstream_items_retailer_idx ON workstream_items USING btree (retailer_id)
+  index CREATE INDEX workstream_items_status_idx ON workstream_items USING btree (item_status)
+  index CREATE UNIQUE INDEX workstream_items_pair_unique ON workstream_items USING btree (retailer_id, product_id)
+  index CREATE UNIQUE INDEX workstream_items_pkey ON workstream_items USING btree (id)
+  trigger CREATE TRIGGER workstream_items_touch BEFORE UPDATE ON workstream_items FOR EACH ROW EXECUTE FUNCTION cld_touch_updated_at()

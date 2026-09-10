@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+/* ───────────────────────────────────────────────────────────────
+   CLD BRAND TOKENS
+   Source of truth: CLAUDE.md §4–§5, project_specs.md §23.
+   Components must consume these tokens — never raw hex values.
+   ─────────────────────────────────────────────────────────────── */
+
+@theme {
+  /* Core brand palette */
+  --color-forest: #12372a; /* primary brand */
+  --color-ink: #151815; /* primary text */
+  --color-paper: #ffffff; /* main surface */
+  --color-rule: #d9ddd7; /* borders, dividers */
+  --color-red: #d72b34; /* attention / correction / blocker / decision ONLY */
+
+  /* Derived neutrals — hierarchy without introducing new hues */
+  --color-ink-muted: #6b706a; /* secondary copy, feedback quotes */
+  --color-ink-faint: #9aa096; /* labels, timestamps, quiet metadata */
+  --color-rule-soft: #ecefe9; /* interior dividers inside a section */
+  --color-surface: #fafaf8; /* subtle section ground, used sparingly */
+
+  /* State tints — reserved, never decorative */
+  --color-forest-tint: #edf1ec; /* selected / active nav / current filter */
+  --color-red-tint: #fceeee; /* attention rows only */
+
+  /* Editorial label scale (11px, uppercase, tracked) */
+  --text-label: 0.6875rem;
+  --text-label--line-height: 1rem;
+  --text-label--letter-spacing: 0.08em;
+}
+
+@theme inline {
+  /* Bound to next/font variables set on <html> in layout.tsx */
+  --font-display: var(--font-fraunces); /* page + section titles, editorial moments */
+  --font-sans: var(--font-instrument-sans); /* nav, labels, tables, body, controls */
+}
+
+/* ───────────────────────────────────────────────────────────────
+   BASE
+   ─────────────────────────────────────────────────────────────── */
+
+@layer base {
+  /* Tailwind v4 defaults every border to currentColor, which would paint
+     hairlines in ink. The CLD layout leans on rules instead of cards, so
+     the brand rule color is the correct default. */
+  *,
+  ::after,
+  ::before {
+    border-color: var(--color-rule);
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+
+  ::selection {
+    background-color: var(--color-forest-tint);
+    color: var(--color-forest);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-forest);
+    outline-offset: 2px;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   EDITORIAL PRIMITIVES
+   One shared definition keeps section labels identical everywhere.
+   ─────────────────────────────────────────────────────────────── */
+
+@utility type-label {
+  font-size: var(--text-label);
+  line-height: var(--text-label--line-height);
+  letter-spacing: var(--text-label--letter-spacing);
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}

@@ -1,0 +1,14 @@
+# One line ending in the repository, whatever the machine checking it out.
+#
+# Without this, Git on Windows warns on every `add` that it will convert LF to
+# CRLF, and a file committed from one platform shows as wholly rewritten when
+# touched on another. `text=auto eol=lf` stores text as LF and lets each
+# checkout use whatever it likes locally.
+* text=auto eol=lf
+
+# Never reinterpreted as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary

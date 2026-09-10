@@ -1,0 +1,19 @@
+-- down/0001_lookups.sql
+drop table if exists lookup_confidence;
+drop table if exists lookup_opportunity_status;
+drop table if exists lookup_opportunity_type;
+drop table if exists lookup_feedback_source;
+drop table if exists lookup_sentiment;
+drop table if exists lookup_activity_type;
+drop table if exists lookup_meeting_status;
+drop table if exists lookup_action_status;
+drop table if exists lookup_broker_status;
+drop table if exists lookup_readiness;
+drop table if exists lookup_sample_status;
+drop table if exists lookup_item_status;
+drop table if exists lookup_fit;
+drop table if exists lookup_tier;
+drop table if exists lookup_priority;
+drop table if exists lookup_current_target;
+drop table if exists lookup_pipeline_status;
+drop function if exists cld_touch_updated_at();
