@@ -26,6 +26,7 @@ import type {
   RetailReadiness,
   Priority,
   SampleStatus,
+  Tier,
 } from "@/lib/status";
 
 /* ── Identifiers ───────────────────────────────────────────────────────── */
@@ -67,15 +68,24 @@ export interface Client {
 
 /* ── Broker ────────────────────────────────────────────────────────────── */
 
+/**
+ * Someone carrying part of the book.
+ *
+ * Two fields are required, because the database requires them: a name and the
+ * short one every table and owner column shows. How CLD describes the desk is
+ * optional and often settled later — the same nullable-column reading the
+ * Retailer type below carries, for the same reason.
+ */
 export interface Broker {
   id: BrokerId;
   name: string;
   /** How the client refers to them in conversation. */
   shortName: string;
-  role: string;
-  coverage: string;
+  role?: string;
+  coverage?: string;
   status: "Active" | "Paused";
-  initials: string;
+  /** Absent falls back to letters taken from the short name, never to blank. */
+  initials?: string;
   /** Storage path for a profile photograph, or null for the initials mark. */
   imagePath: string | null;
 }
@@ -125,32 +135,51 @@ export interface Product {
 
 /* ── Retailer Pipeline ─────────────────────────────────────────────────── */
 
+/**
+ * A retail account on the pipeline.
+ *
+ * Five fields are required, because the database requires them: an account has
+ * to have an id, a name, a short name, a channel and a place on the pipeline
+ * ladder before it can be talked about at all. Everything else is optional and
+ * genuinely often unknown — CLD routinely opens an account long before anyone
+ * has sized its door count or formed a view on fit.
+ *
+ * These were once all required, and that was a lie the seeded workbook data
+ * happened to cover for: every column below is nullable in Postgres, so the
+ * first sparse account entered through the portal put NULLs into fields the
+ * renderer had been told could never be absent. An optional field renders as
+ * absent, not as zero — an account with no door count recorded does not have
+ * no doors, and a step nobody has dated is not a step due today.
+ */
 export interface Retailer {
   id: RetailerId;
   name: string;
   /** Compact label for dense views such as the opportunity map. */
   shortName: string;
   channel: string;
-  geography: string;
+  geography?: string;
   currentTarget: CurrentTarget;
-  priority: Priority;
-  assignedBrokerId: BrokerId;
+  /** How big a prize the account is, in the workbook's three bands. */
+  tier?: Tier;
+  priority?: Priority;
+  /** Absent while the account is unassigned; brokers.id is ON DELETE SET NULL. */
+  assignedBrokerId?: BrokerId;
   overallStatus: PipelineStatus;
   sampleStatus: SampleStatus;
-  fit: Fit;
+  fit?: Fit;
   categories: string[];
-  approximateDoors: number;
-  assumedSkus: number;
-  unitsPerStoreWeek: number;
+  approximateDoors?: number;
+  assumedSkus?: number;
+  unitsPerStoreWeek?: number;
   /** Fictional demo contact — never a real buyer name. */
   buyerContact: string;
   /** Absent when the account has not been contacted yet. */
   lastContact?: string;
-  nextAction: string;
-  nextActionDate: string;
+  nextAction?: string;
+  nextActionDate?: string;
   meetingStatus: MeetingStatus;
   meetingDate?: string;
-  notes: string;
+  notes?: string;
   /**
    * The portal's own layer, not a workbook column: present only when this
    * account genuinely needs a decision. The only thing that puts a retailer

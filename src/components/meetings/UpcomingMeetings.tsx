@@ -1,6 +1,7 @@
 import { ArrowUpRight, CalendarClock } from "lucide-react";
 import Link from "next/link";
 
+import { BrokerName } from "@/components/primitives/BrokerName";
 import { EmptyState } from "@/components/primitives/EmptyState";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
 import { cn } from "@/lib/cn";
@@ -79,12 +80,7 @@ export function UpcomingMeetings({ meetings }: { meetings: UpcomingMeeting[] }) 
               </h3>
 
               <p className="type-label mt-1.5">
-                <Link
-                  href={"/brokers/" + broker.id}
-                  className="transition-colors hover:text-forest"
-                >
-                  {broker.name}
-                </Link>
+                <BrokerName broker={broker} />
               </p>
 
               <StatusBadge

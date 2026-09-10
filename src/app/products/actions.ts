@@ -10,10 +10,9 @@ import {
   setEntityImage,
   updateProduct,
   type FieldErrors,
-  type ImageIntent,
   type ProductDraft,
 } from "@/lib/db/mutations";
-import { readUpload } from "@/lib/storage/assets";
+import { readImageIntent } from "@/lib/storage/intent";
 
 /**
  * The product write path's boundary.
@@ -31,33 +30,6 @@ export interface ProductFormState {
 }
 
 const text = (form: FormData, name: string) => String(form.get(name) ?? "").trim();
-
-/**
- * What the form said about the picture.
- *
- * A browser posts an untouched file input as a zero-byte entry, which is
- * indistinguishable from a deliberate choice unless the form says which it
- * meant — so the intent is carried by its own field, and the file is only ever
- * read when that field asks for it.
- *
- * Every byte is validated here, at the boundary, before the write layer is
- * called at all. The accept attribute on the input is a convenience for the
- * person choosing a file; it is not a control, because nothing obliges a
- * request to have come from that form.
- */
-async function readImageIntent(
-  form: FormData,
-): Promise<{ intent: ImageIntent } | { error: string }> {
-  if (form.get("imageAction") === "remove") return { intent: { kind: "remove" } };
-
-  const file = form.get("image");
-  if (!(file instanceof File) || file.size === 0) return { intent: { kind: "keep" } };
-
-  const upload = await readUpload(file);
-  if (!upload.ok) return { error: upload.error };
-
-  return { intent: { kind: "replace", upload } };
-}
 
 function readDraft(form: FormData): ProductDraft {
   return {

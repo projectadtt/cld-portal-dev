@@ -1,6 +1,7 @@
 import { AlertCircle } from "lucide-react";
 import Link from "next/link";
 
+import { BrokerName } from "@/components/primitives/BrokerName";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
 import { cn } from "@/lib/cn";
 import {
@@ -68,12 +69,11 @@ export function PipelineReport() {
               </th>
 
               <td className="py-2.5 pr-4 text-[13px] leading-5">
-                <Link
-                  href={"/brokers/" + row.broker.id}
-                  className="text-ink-muted transition-colors hover:text-forest"
-                >
-                  {row.broker.shortName}
-                </Link>
+                <BrokerName
+                  broker={row.broker}
+                  short
+                  className="text-ink-muted"
+                />
               </td>
 
               <td className="py-2.5 pr-4">

@@ -1,6 +1,7 @@
 import { AlertCircle, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
+import { BrokerName } from "@/components/primitives/BrokerName";
 import { StageProgress } from "@/components/primitives/StageProgress";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
 import { RetailerMark } from "@/components/retailer/RetailerMark";
@@ -40,22 +41,19 @@ export function RetailerHeader({ detail }: { detail: RetailerDetail }) {
               {/* Each separator travels with the fact that follows it, so a
                 wrapped line never opens on a stray middot. */}
               <p className="mt-2.5 flex flex-wrap items-center gap-x-2 text-[15px] leading-relaxed text-ink-muted">
-                {[retailer.channel, retailer.geography].map((fact, i) => (
-                  <span key={fact} className="flex items-center gap-2">
-                    {i > 0 ? <span aria-hidden="true">·</span> : null}
-                    {fact}
-                  </span>
-                ))}
+                {[retailer.channel, retailer.geography]
+                  .filter((fact) => fact !== undefined)
+                  .map((fact, i) => (
+                    <span key={fact} className="flex items-center gap-2">
+                      {i > 0 ? <span aria-hidden="true">·</span> : null}
+                      {fact}
+                    </span>
+                  ))}
               </p>
 
               <p className="type-label mt-3">
-                <Link
-                  href={"/brokers/" + broker.id}
-                  className="transition-colors hover:text-forest"
-                >
-                  {broker.name}
-                </Link>
-                {" · " + broker.role}
+                <BrokerName broker={broker} />
+                {broker?.role ? " · " + broker.role : ""}
               </p>
             </div>
           </div>

@@ -36,6 +36,7 @@ import {
   PRIORITIES,
   RETAIL_READINESS,
   SAMPLE_STATUSES,
+  TIERS,
   type MeetingStatus,
   type SampleStatus,
 } from "@/lib/status";
@@ -78,6 +79,19 @@ const PIPELINE_WORDING: Record<string, string> = {
   "Reached out - waiting on response": "Reached out - waiting for response",
 };
 
+/**
+ * The same map, read the other way, for the write path.
+ *
+ * A form offers the wording the portal displays; the column stores the
+ * workbook's. Inverting the one map here rather than writing a second one
+ * keeps the promise made above: this is still the only place the two
+ * vocabularies meet, in either direction.
+ */
+export function storedPipelineStatus(displayed: string): string {
+  const pair = Object.entries(PIPELINE_WORDING).find(([, shown]) => shown === displayed);
+  return pair ? pair[0] : displayed;
+}
+
 /* -- narrowing ---------------------------------------------------------- */
 
 /**
@@ -103,17 +117,28 @@ type ClientRow = {
   tagline: string | null; category: string | null; is_demo: boolean;
 };
 type BrokerRow = {
-  id: string; name: string; short_name: string; role: string; coverage: string;
-  status: string; initials: string; image_path: string | null;
+  id: string; name: string; short_name: string;
+  role: string | null; coverage: string | null;
+  status: string; initials: string | null; image_path: string | null;
 };
+/* Every column the retailers table declares nullable is nullable here. The
+   shape used to overstate what the table guarantees, and the mapping below
+   cast straight through it, so a sparse account reached the renderer holding
+   nulls in fields typed as present. Only what the table marks NOT NULL --
+   id, name, short_name, channel, current_target, pipeline_status,
+   categories -- is non-null. */
 type RetailerRow = {
-  id: string; name: string; short_name: string; channel: string; geography: string;
-  assigned_broker_id: string; current_target: string; pipeline_status: string;
-  priority: string; fit: string; categories: string[]; approximate_doors: number;
-  assumed_skus: number; units_per_store_week: string; last_contact: string | null;
-  attention_reason: string | null; notes: string;
+  id: string; name: string; short_name: string; channel: string;
+  geography: string | null;
+  assigned_broker_id: string | null; current_target: string; pipeline_status: string;
+  tier: string | null;
+  priority: string | null; fit: string | null; categories: string[];
+  approximate_doors: number | null;
+  assumed_skus: number | null; units_per_store_week: string | null;
+  last_contact: string | null;
+  attention_reason: string | null; notes: string | null;
   next_meeting_status: string | null; next_meeting_at: string | null;
-  next_action: string; next_action_date: string; image_path: string | null;
+  next_action: string | null; next_action_date: string | null; image_path: string | null;
 };
 type ProductRow = {
   id: string; item_id: string; category: string; name: string;
@@ -182,7 +207,7 @@ async function load(clientId: string): Promise<Workspace> {
          from brokers where client_id = $1 and archived_at is null order by display_order, id`, [clientId]),
     () => query<RetailerRow>(
       `select id, name, short_name, channel, geography, assigned_broker_id, current_target,
-              pipeline_status, priority, fit, categories, approximate_doors, assumed_skus,
+              pipeline_status, tier, priority, fit, categories, approximate_doors, assumed_skus,
               units_per_store_week, last_contact::text as last_contact, attention_reason, notes,
               next_meeting_status, next_meeting_at::text as next_meeting_at,
               next_action, next_action_date::text as next_action_date, image_path
@@ -276,21 +301,22 @@ async function load(clientId: string): Promise<Workspace> {
       } as Client)
     : null;
 
+  /* A null column becomes an absent field, never a zero. An item with no
+     landed cost recorded has no landed cost — it does not cost nothing.
+     Declared before the first mapping that needs them. */
+  const num = (value: string | null) => (value === null ? undefined : Number(value));
+  const text = (value: string | null) => value ?? undefined;
+
   const brokers: Broker[] = brokerRows.map((b) => ({
     id: b.id as BrokerId,
     name: b.name,
     shortName: b.short_name,
-    role: b.role,
-    coverage: b.coverage,
+    role: text(b.role),
+    coverage: text(b.coverage),
     status: b.status as Broker["status"],
-    initials: b.initials,
+    initials: text(b.initials),
     imagePath: b.image_path,
   }));
-
-  /* A null column becomes an absent field, never a zero. An item with no
-     landed cost recorded has no landed cost — it does not cost nothing. */
-  const num = (value: string | null) => (value === null ? undefined : Number(value));
-  const text = (value: string | null) => value ?? undefined;
 
   const products: Product[] = productRows.map((p) => {
     const landed = num(p.landed_cost);
@@ -493,10 +519,14 @@ async function load(clientId: string): Promise<Workspace> {
       name: r.name,
       shortName: r.short_name,
       channel: r.channel,
-      geography: r.geography,
+      geography: text(r.geography),
       currentTarget: must(CURRENT_TARGET_VALUES, r.current_target, `retailers.${r.id}.currentTarget`),
-      priority: must(PRIORITIES, r.priority, `retailers.${r.id}.priority`),
-      assignedBrokerId: r.assigned_broker_id as BrokerId,
+      /* maybe, not must: these columns are nullable, so NULL is a legitimate
+         "no view recorded" rather than a value outside the vocabulary. A
+         value the vocabulary does not contain is still an error. */
+      tier: maybe(TIERS, r.tier, `retailers.${r.id}.tier`),
+      priority: maybe(PRIORITIES, r.priority, `retailers.${r.id}.priority`),
+      assignedBrokerId: (r.assigned_broker_id ?? undefined) as BrokerId | undefined,
       overallStatus: must(
         PIPELINE_STATUSES,
         PIPELINE_WORDING[r.pipeline_status] ?? r.pipeline_status,
@@ -508,18 +538,18 @@ async function load(clientId: string): Promise<Workspace> {
           SAMPLE_STATUSES.indexOf(i.sampleStatus) > SAMPLE_STATUSES.indexOf(best) ? i.sampleStatus : best,
         "Not discussed",
       ),
-      fit: must(FIT_LEVELS, r.fit, `retailers.${r.id}.fit`),
+      fit: maybe(FIT_LEVELS, r.fit, `retailers.${r.id}.fit`),
       categories: r.categories,
-      approximateDoors: r.approximate_doors,
-      assumedSkus: r.assumed_skus,
-      unitsPerStoreWeek: Number(r.units_per_store_week),
+      approximateDoors: r.approximate_doors ?? undefined,
+      assumedSkus: r.assumed_skus ?? undefined,
+      unitsPerStoreWeek: num(r.units_per_store_week),
       buyerContact: primaryContact.get(r.id)?.name ?? NO_CONTACT,
       lastContact: r.last_contact ?? undefined,
-      nextAction: r.next_action,
-      nextActionDate: r.next_action_date,
+      nextAction: text(r.next_action),
+      nextActionDate: text(r.next_action_date),
       meetingStatus,
       meetingDate,
-      notes: r.notes,
+      notes: text(r.notes),
       attention: r.attention_reason ? { reason: r.attention_reason } : undefined,
       imagePath: r.image_path,
     };

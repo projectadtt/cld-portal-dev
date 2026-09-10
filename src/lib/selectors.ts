@@ -55,6 +55,26 @@ import {
   type Priority,
 } from "@/lib/status";
 
+/**
+ * What the portal calls an account nobody is carrying.
+ *
+ * One word, defined once, so the Overview, the pipeline table and the account
+ * page cannot drift into saying it three different ways. It is a statement
+ * about the record, not a stand-in broker: nothing links anywhere from it.
+ */
+export const UNASSIGNED = "Unassigned";
+
+/**
+ * What the portal calls a field nobody has filled in.
+ *
+ * Used where a label is already on screen and its value is missing — a
+ * label/value row reads as broken with nothing beside it. Inline metadata
+ * uses `meta()` instead and simply omits the absent part, and dense table
+ * cells keep their existing em dash: three registers, one meaning, each
+ * chosen so a sparse account does not shout about everything it lacks.
+ */
+export const NOT_RECORDED = "Not recorded";
+
 /* ── Data source ───────────────────────────────────────────────────────── */
 
 /**
@@ -259,9 +279,24 @@ export function pageTitle(section: string): string {
 }
 
 /** Owners are brokers or the client themself. */
-export function getOwnerName(ownerId: OwnerId): string {
+export function getOwnerName(ownerId: OwnerId | undefined): string {
+  if (ownerId === undefined) return UNASSIGNED;
   if (ownerId === "client") return d.client?.name ?? "The client";
-  return d.brokersById[ownerId]?.shortName ?? "Unassigned";
+  return d.brokersById[ownerId]?.shortName ?? UNASSIGNED;
+}
+
+/**
+ * Resolves the broker carrying an account, which may be nobody.
+ *
+ * assigned_broker_id is nullable and ON DELETE SET NULL, so an account can
+ * legitimately have no broker — newly entered, or left behind when a broker
+ * was removed. Every caller takes `Broker | undefined` and names the gap
+ * rather than being handed a stand-in.
+ */
+function brokerFor(retailer: Retailer): Broker | undefined {
+  return retailer.assignedBrokerId === undefined
+    ? undefined
+    : d.brokersById[retailer.assignedBrokerId];
 }
 
 /**
@@ -407,7 +442,8 @@ export function getProgressFunnel(): FunnelStep[] {
 
 export interface AttentionSignal {
   retailer: Retailer;
-  broker: Broker;
+  /** Absent while the account is unassigned. */
+  broker?: Broker;
   /** What is actually wrong, in one line. */
   headline: string;
   nextAction?: Action;
@@ -449,7 +485,7 @@ export function getAttentionSignals(): AttentionSignal[] {
 
     signals.push({
       retailer,
-      broker: d.brokersById[retailer.assignedBrokerId],
+      broker: brokerFor(retailer),
       headline:
         retailer.attention?.reason ??
         (overdue && nextAction
@@ -479,7 +515,8 @@ export function getAttentionSignals(): AttentionSignal[] {
 
 export interface WorkstreamRow {
   retailer: Retailer;
-  broker: Broker;
+  /** Absent while the account is unassigned. */
+  broker?: Broker;
   items: ResolvedItem[];
   itemCount: number;
   pitchedCount: number;
@@ -499,7 +536,7 @@ export function getWorkstreamRows(brokerId?: BrokerId): WorkstreamRow[] {
       const items = getRetailerItems(retailer.id);
       return {
         retailer,
-        broker: d.brokersById[retailer.assignedBrokerId],
+        broker: brokerFor(retailer),
         items,
         itemCount: items.length,
         pitchedCount: items.filter((i) => isPitched(i.record.itemStatus))
@@ -519,20 +556,39 @@ export function getWorkstreamRows(brokerId?: BrokerId): WorkstreamRow[] {
 }
 
 export interface WorkstreamGroup {
-  broker: Broker;
+  /** Absent on the trailing group of accounts nobody is carrying. */
+  broker?: Broker;
   rows: WorkstreamRow[];
 }
 
-/** The same rows, grouped under their broker for the workstream screen. */
+/**
+ * The same rows, grouped under their broker for the workstream screen.
+ *
+ * Accounts with no broker are collected into a final group rather than
+ * dropped. Silently omitting them would hide exactly the thing the screen
+ * exists to surface — work with nobody on it — and would let the workstream
+ * and the pipeline table disagree about how many accounts there are.
+ */
 export function getWorkstreamGroups(brokerId?: BrokerId): WorkstreamGroup[] {
   const rows = getWorkstreamRows(brokerId);
-  return d.brokers
+
+  const groups: WorkstreamGroup[] = d.brokers
     .filter((broker) => brokerId === undefined || broker.id === brokerId)
     .map((broker) => ({
       broker,
-      rows: rows.filter((row) => row.broker.id === broker.id),
-    }))
-    .filter((group) => group.rows.length > 0);
+      rows: rows.filter((row) => row.retailer.assignedBrokerId === broker.id),
+    }));
+
+  /* Only when the screen is not already filtered to one broker: an unassigned
+     account is not part of any broker's book. */
+  if (brokerId === undefined) {
+    const unassigned = rows.filter(
+      (row) => row.retailer.assignedBrokerId === undefined,
+    );
+    if (unassigned.length > 0) groups.push({ rows: unassigned });
+  }
+
+  return groups.filter((group) => group.rows.length > 0);
 }
 
 /** Broker coverage: who carries how much of the book. */
@@ -726,7 +782,8 @@ export function getWorkstreamItem(itemId: string): WorkstreamItemDetail | null {
 
 export interface RetailerDetail {
   retailer: Retailer;
-  broker: Broker;
+  /** Absent while the account is unassigned. */
+  broker?: Broker;
   items: ResolvedItem[];
   /** Items with their tracked action resolved, for the workstream section. */
   itemRows: RetailerItemRow[];
@@ -752,7 +809,7 @@ export function getRetailerDetail(id: string): RetailerDetail | null {
   const retailerActions = getRetailerActions(retailer.id);
   return {
     retailer,
-    broker: d.brokersById[retailer.assignedBrokerId],
+    broker: brokerFor(retailer),
     items: getRetailerItems(retailer.id),
     itemRows: getRetailerItemRows(retailer.id),
     feedback: getRetailerFeedback(retailer.id),
@@ -1071,7 +1128,8 @@ export function getMeetingSummaries(): MeetingSummary[] {
  */
 export interface UpcomingMeeting {
   retailer: Retailer;
-  broker: Broker;
+  /** Absent while the account is unassigned. */
+  broker?: Broker;
   status: MeetingStatus;
   /** Absent when a meeting has been requested but not yet dated. */
   date?: string;
@@ -1089,7 +1147,7 @@ export function getUpcomingMeetings(): UpcomingMeeting[] {
     .filter((r) => UPCOMING_STATUSES.includes(r.meetingStatus))
     .map((retailer) => ({
       retailer,
-      broker: d.brokersById[retailer.assignedBrokerId],
+      broker: brokerFor(retailer),
       status: retailer.meetingStatus,
       date: retailer.meetingDate,
       lastMeeting: getRetailerMeetings(retailer.id)[0],
@@ -1242,7 +1300,8 @@ export interface OpportunityMapPoint {
   /** 0–100. Unit prize, log-scaled so one giant does not flatten the rest. */
   marketOpportunity: number;
   inWorkstream: boolean;
-  note: string;
+  /** Absent when no note has been written on the account. */
+  note?: string;
 }
 
 const FIT_SCORE: Record<Fit, number> = {
@@ -1252,14 +1311,23 @@ const FIT_SCORE: Record<Fit, number> = {
   Unknown: 40,
 };
 
-/** doors x SKUs x units per store per week x 52. */
-function annualUnitOpportunity(retailer: Retailer): number {
-  return (
-    retailer.approximateDoors *
-    retailer.assumedSkus *
-    retailer.unitsPerStoreWeek *
-    52
-  );
+/**
+ * doors x SKUs x units per store per week x 52.
+ *
+ * Undefined when any of the three is unrecorded. Treating an absent door
+ * count as nought would plot the account at the origin as though CLD had
+ * sized it and found nothing there, which is a different and untrue claim.
+ */
+function annualUnitOpportunity(retailer: Retailer): number | undefined {
+  const { approximateDoors, assumedSkus, unitsPerStoreWeek } = retailer;
+  if (
+    approximateDoors === undefined ||
+    assumedSkus === undefined ||
+    unitsPerStoreWeek === undefined
+  ) {
+    return undefined;
+  }
+  return approximateDoors * assumedSkus * unitsPerStoreWeek * 52;
 }
 
 /**
@@ -1271,26 +1339,44 @@ function annualUnitOpportunity(retailer: Retailer): number {
  * axis would push everything else into one corner.
  */
 export function getOpportunityMap(): OpportunityMapPoint[] {
-  const volumes = d.retailers.map((r) => Math.log10(annualUnitOpportunity(r)));
+  /* Only accounts that can actually be placed. Both axes are derived — an
+     account with no volume inputs has no position on one, and no recorded fit
+     has none on the other. Plotting it anyway would put a mark on the chart
+     that no data supports; getUnsizedRetailers names them instead. */
+  const sizable = d.retailers.filter(
+    (r) => annualUnitOpportunity(r) !== undefined && r.fit !== undefined,
+  );
+
+  const volumes = sizable.map((r) => Math.log10(annualUnitOpportunity(r)!));
   const min = Math.min(...volumes);
   const max = Math.max(...volumes);
   const span = max - min || 1;
 
-  return d.retailers.map((retailer) => {
+  return sizable.map((retailer) => {
     const progress = (pipelineIndex(retailer.overallStatus) / 10) * 100;
     return {
       id: retailer.id,
       name: retailer.shortName,
       brandReadiness: Math.round(
-        0.6 * progress + 0.4 * FIT_SCORE[retailer.fit],
+        0.6 * progress + 0.4 * FIT_SCORE[retailer.fit!],
       ),
       marketOpportunity: Math.round(
-        ((Math.log10(annualUnitOpportunity(retailer)) - min) / span) * 100,
+        ((Math.log10(annualUnitOpportunity(retailer)!) - min) / span) * 100,
       ),
       inWorkstream: d.workstream.some((w) => w.retailerId === retailer.id),
       note: retailer.notes,
     };
   });
+}
+
+/**
+ * Accounts the map cannot place, and why — so they are visibly set aside
+ * rather than quietly missing from a chart that claims to show the book.
+ */
+export function getUnsizedRetailers(): Retailer[] {
+  return d.retailers.filter(
+    (r) => annualUnitOpportunity(r) === undefined || r.fit === undefined,
+  );
 }
 
 export function getNotYet(): NotYetItem[] {
@@ -1672,7 +1758,8 @@ export function getPipelineMetrics(): PipelineMetrics {
 /** One account on the pipeline screen. */
 export interface RetailerPipelineRow {
   retailer: Retailer;
-  broker: Broker;
+  /** Absent while the account is unassigned. */
+  broker?: Broker;
   items: ResolvedItem[];
   samplesOut: number;
   feedbackCount: number;
@@ -1717,7 +1804,7 @@ function toRow(retailer: Retailer, attention?: string): RetailerPipelineRow {
 
   return {
     retailer,
-    broker: d.brokersById[retailer.assignedBrokerId],
+    broker: brokerFor(retailer),
     items,
     samplesOut: items.filter((i) => isSampleWithRetailer(i.record.sampleStatus))
       .length,
@@ -1766,7 +1853,8 @@ export function getRetailerPipeline(
       (filter.phase === undefined ||
         pipelinePhase(r.overallStatus).id === filter.phase) &&
       (!query ||
-        [r.name, r.shortName, r.channel, d.brokersById[r.assignedBrokerId].name]
+        [r.name, r.shortName, r.channel, brokerFor(r)?.name]
+          .filter(Boolean)
           .join(" ")
           .toLowerCase()
           .includes(query)),
@@ -2368,7 +2456,7 @@ export function getBrokerCoverageReport(): BrokerCoverageRow[] {
 
   return getBrokerScorecards().map((scorecard) => ({
     scorecard,
-    needsAttention: flagged.filter((s) => s.broker.id === scorecard.broker.id)
+    needsAttention: flagged.filter((s) => s.broker?.id === scorecard.broker.id)
       .length,
   }));
 }

@@ -2,7 +2,12 @@ import Link from "next/link";
 
 import { SectionHeader } from "@/components/primitives/SectionHeader";
 import { SectionLink } from "@/components/primitives/SectionLink";
-import { getProgressFunnel, getWorkstreamGroups } from "@/lib/selectors";
+import { meta } from "@/lib/cn";
+import {
+  UNASSIGNED,
+  getProgressFunnel,
+  getWorkstreamGroups,
+} from "@/lib/selectors";
 
 /**
  * How far the book of accounts has travelled — a funnel, not a reprint of the
@@ -60,24 +65,33 @@ export function RetailerProgress() {
         <p className="type-label mb-3.5">Assigned brokers</p>
 
         <ul className="space-y-3">
-          {groups.map(({ broker, rows }) => (
-            <li
-              key={broker.id}
-              className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-1"
-            >
-              <Link
-                href={"/workstream?broker=" + broker.id}
-                className="text-sm text-ink transition-colors hover:text-forest"
+          {groups.map(({ broker, rows }) => {
+            const count =
+              rows.length === 1 ? "1 account" : rows.length + " accounts";
+
+            return (
+              <li
+                key={broker?.id ?? "unassigned"}
+                className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-1"
               >
-                {broker.name}
-              </Link>
-              <p className="type-label">
-                {broker.coverage +
-                  " · " +
-                  (rows.length === 1 ? "1 account" : rows.length + " accounts")}
-              </p>
-            </li>
-          ))}
+                {/* Accounts with no broker are named here too. This block is
+                    the client's first-named requirement — who is on what —
+                    so an account with nobody on it is the one row that most
+                    needs to be visible, not the one to leave out. */}
+                {broker ? (
+                  <Link
+                    href={"/workstream?broker=" + broker.id}
+                    className="text-sm text-ink transition-colors hover:text-forest"
+                  >
+                    {broker.name}
+                  </Link>
+                ) : (
+                  <span className="text-sm text-ink-muted">{UNASSIGNED}</span>
+                )}
+                <p className="type-label">{meta(broker?.coverage, count)}</p>
+              </li>
+            );
+          })}
         </ul>
       </div>
     </section>

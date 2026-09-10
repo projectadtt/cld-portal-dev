@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { MetaPair } from "@/components/primitives/MetaPair";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
-import { cn } from "@/lib/cn";
+import { cn, meta } from "@/lib/cn";
 import {
   formatDueDate,
   formatRelativeDate,
@@ -45,7 +45,7 @@ export function BrokerPortfolioCard({
               </Link>
             </h3>
             <p className="type-label mt-1.5">
-              {broker.coverage + " · " + broker.role}
+              {meta(broker.coverage, broker.role)}
             </p>
           </div>
 

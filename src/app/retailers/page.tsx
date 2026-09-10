@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/layout/PageHeader";
+import { SectionLink } from "@/components/primitives/SectionLink";
 import { PipelineSummary } from "@/components/retailers/PipelineSummary";
 import {
   RetailerFilters,
@@ -32,7 +33,11 @@ export default async function RetailersPage({
         eyebrow="Retailers"
         title="Where we're building the retail path."
         description="Every target account, the broker responsible, what's moving, and what needs attention next."
-      />
+      >
+        {/* PageHeader's own slot for a right-side action, rather than a new
+            section heading invented to hold one. */}
+        <SectionLink href="/retailers/new">Add a retailer</SectionLink>
+      </PageHeader>
 
       <PipelineSummary />
 

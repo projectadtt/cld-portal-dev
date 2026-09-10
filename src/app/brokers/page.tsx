@@ -5,6 +5,7 @@ import { BrokerScorecardTable } from "@/components/brokers/BrokerScorecardTable"
 import { BrokerSpotlight } from "@/components/brokers/BrokerSpotlight";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { SectionHeader } from "@/components/primitives/SectionHeader";
+import { SectionLink } from "@/components/primitives/SectionLink";
 import { getBrokerScorecardTotals, pageTitle } from "@/lib/selectors";
 import { loadWorkspace } from "@/lib/db/workspace";
 
@@ -65,6 +66,7 @@ export default async function BrokersPage() {
         <SectionHeader
           title="Portfolios"
           description="What moved last and what moves next on each desk."
+          action={<SectionLink href="/brokers/new">Add a broker</SectionLink>}
         />
         <BrokerList />
       </section>

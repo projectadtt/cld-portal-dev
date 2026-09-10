@@ -5,7 +5,7 @@ import { EmptyState } from "@/components/primitives/EmptyState";
 import { MetaPair } from "@/components/primitives/MetaPair";
 import { StageProgress } from "@/components/primitives/StageProgress";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
-import { cn } from "@/lib/cn";
+import { cn, meta } from "@/lib/cn";
 import {
   formatDueDate,
   formatRelativeDate,
@@ -60,8 +60,10 @@ export function BrokerAccounts({ accounts }: { accounts: BrokerAccount[] }) {
                       />
                     </Link>
                   </h3>
+                  {/* meta drops an absent geography rather than printing the
+                      word "undefined" after the separator. */}
                   <p className="type-label mt-1.5">
-                    {retailer.channel + " · " + retailer.geography}
+                    {meta(retailer.channel, retailer.geography)}
                   </p>
                 </div>
 

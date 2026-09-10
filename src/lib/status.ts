@@ -219,6 +219,39 @@ export function isPursued(value: CurrentTarget): boolean {
 export const PRIORITIES = ["High", "Medium", "Low"] as const;
 export type Priority = (typeof PRIORITIES)[number];
 
+/* ── Retailer tier and standing ────────────────────────────────────────── */
+
+/**
+ * How big a prize the account is, in the workbook's own three bands.
+ *
+ * Offered when an account is entered, because that is when someone knows it,
+ * and read on the account's own page beside Priority — the two are the same
+ * kind of judgement and belong together. Optional in the database and
+ * optional here: an account nobody has banded yet reads as unrecorded rather
+ * than being sorted into a default band.
+ *
+ * Narrowed with `maybe()` rather than `must()` in workspace.ts, so a NULL is
+ * an absent view while a value outside these three is still an error.
+ */
+export const TIERS = ["Tier 1", "Tier 2", "Tier 3"] as const;
+export type Tier = (typeof TIERS)[number];
+
+/**
+ * Whether the account is being worked right now.
+ *
+ * Recorded by the create form and not yet read by any screen. Deliberately
+ * not narrowed on the way in, so a value here cannot make a row the portal is
+ * unable to render; it is still checked against its lookup table on write,
+ * like every other one.
+ */
+export const STANDINGS = [
+  "Active",
+  "Follow-up required",
+  "On hold",
+  "Not proceeding",
+] as const;
+export type Standing = (typeof STANDINGS)[number];
+
 /* ── Meeting status ────────────────────────────────────────────────────── */
 
 export const MEETING_STATUSES = [

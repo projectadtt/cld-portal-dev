@@ -4,7 +4,7 @@ import { EmptyState } from "@/components/primitives/EmptyState";
 import { SectionHeader } from "@/components/primitives/SectionHeader";
 import { WorkstreamRow } from "@/components/workstream/WorkstreamRow";
 import type { BrokerId } from "@/data/types";
-import { getAllBrokers, getWorkstreamGroups } from "@/lib/selectors";
+import { UNASSIGNED, getAllBrokers, getWorkstreamGroups } from "@/lib/selectors";
 
 /**
  * The workstream, grouped by broker.
@@ -35,10 +35,17 @@ export function WorkstreamList({ brokerId }: { brokerId?: BrokerId }) {
   return (
     <div className="space-y-10">
       {groups.map(({ broker, rows }) => (
-        <section key={broker.id}>
+        /* The trailing group has no broker: accounts nobody is carrying yet.
+           They are headed as such rather than left off the screen, because
+           work with no owner is precisely what this view is for. */
+        <section key={broker?.id ?? "unassigned"}>
           <SectionHeader
-            title={broker.name}
-            description={broker.coverage}
+            title={broker?.name ?? UNASSIGNED}
+            description={
+              broker
+                ? broker.coverage
+                : "No broker has been assigned to these accounts yet."
+            }
             action={
               <p className="type-label">
                 {rows.length === 1 ? "1 account" : rows.length + " accounts"}

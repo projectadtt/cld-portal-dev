@@ -1,8 +1,9 @@
 import "server-only";
 
 import { withTransaction } from "./pool";
-import { DEFAULT_CLIENT_ID, resetWorkspace } from "./workspace";
+import { DEFAULT_CLIENT_ID, resetWorkspace, storedPipelineStatus } from "./workspace";
 import { DEMO_TODAY } from "@/lib/demo";
+import { PIPELINE_STATUSES, type PipelineStatus } from "@/lib/status";
 import {
   putAsset,
   removeAsset,
@@ -98,7 +99,14 @@ async function inLookup(
     | "lookup_sample_status"
     | "lookup_action_status"
     | "lookup_feedback_source"
-    | "lookup_readiness",
+    | "lookup_readiness"
+    | "lookup_broker_status"
+    | "lookup_current_target"
+    | "lookup_pipeline_status"
+    | "lookup_tier"
+    | "lookup_priority"
+    | "lookup_fit"
+    | "lookup_standing",
   value: string,
 ): Promise<boolean> {
   const { rowCount } = await client.query(
@@ -943,6 +951,249 @@ export async function archiveProduct(
           (Number(n) > 0 ? ` — ${n} workstream record(s) keep their history` : ""),
       ],
     };
+  });
+
+  if (result.ok) resetWorkspace(clientId);
+  return result;
+}
+
+/* ── Brokers ───────────────────────────────────────────────────────────── */
+
+export interface BrokerDraft {
+  name: string;
+  shortName: string;
+  role: string;
+  coverage: string;
+  initials: string;
+  email: string;
+  phone: string;
+}
+
+/**
+ * A new broker on this client's books.
+ *
+ * The people side of the workstream, and the reason it exists before
+ * retailers: an account carries `assigned_broker_id`, so there has to be
+ * somebody to assign it to. Nothing here can be reached from a retailer form.
+ *
+ * `status` is not in the draft. Every broker starts Active, and pausing one is
+ * an edit — a decision taken later, about someone already on the books, not
+ * something to answer while adding them.
+ */
+export async function createBroker(
+  draft: BrokerDraft,
+  clientId: string = DEFAULT_CLIENT_ID,
+): Promise<CreateResult> {
+  const result = await withTransaction<CreateResult>(async (client) => {
+    const { rowCount: hasClient } = await client.query(
+      `select 1 from clients where id = $1`,
+      [clientId],
+    );
+    if (!hasClient) {
+      return {
+        ok: false,
+        changed: [],
+        errors: { form: "This workspace has not been set up yet." },
+      };
+    }
+
+    const errors: FieldErrors = {};
+    const name = draft.name.trim();
+    const shortName = draft.shortName.trim();
+
+    if (!name) errors.name = "A broker needs a name.";
+    else if (name.length > 120) errors.name = "Keep the name under 120 characters.";
+
+    if (!shortName) errors.shortName = "A short name is what tables and chips show.";
+    else if (shortName.length > 40) errors.shortName = "Keep this to a word or two.";
+
+    const email = draft.email.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = "That does not look like an email address, or leave it blank.";
+    }
+
+    const initials = draft.initials.trim();
+    if (initials && initials.length > 4) {
+      errors.initials = "Two or three letters.";
+    }
+
+    /* The database enforces this too — unique (client_id, name). Catching it
+       here names the field instead of surfacing a constraint violation. */
+    if (name) {
+      const { rowCount } = await client.query(
+        `select 1 from brokers where client_id = $1 and lower(name) = lower($2)`,
+        [clientId, name],
+      );
+      if (rowCount) errors.name = "A broker with this name is already on the books.";
+    }
+
+    if (Object.keys(errors).length > 0) return { ok: false, changed: [], errors };
+
+    /* Same rule as products: the slug is the route segment, so a second
+       broker with a clashing name becomes -2 rather than being refused. */
+    const base = slugify(name) || "broker";
+    let id = base;
+    for (let suffix = 2; suffix < 100; suffix++) {
+      const { rowCount } = await client.query(`select 1 from brokers where id = $1`, [id]);
+      if (!rowCount) break;
+      id = `${base}-${suffix}`;
+    }
+
+    await client.query(
+      `insert into brokers
+         (id, client_id, name, short_name, role, coverage, initials, email, phone,
+          status, display_order)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Active',
+               (select coalesce(max(display_order), 0) + 1
+                  from brokers where client_id = $2))`,
+      [
+        id, clientId, name, shortName,
+        trimmed(draft.role), trimmed(draft.coverage), trimmed(initials),
+        trimmed(email), trimmed(draft.phone),
+      ],
+    );
+
+    return { ok: true, errors: {}, changed: [`${name} added`], id };
+  });
+
+  if (result.ok) resetWorkspace(clientId);
+  return result;
+}
+
+/* ── Retailers ─────────────────────────────────────────────────────────── */
+
+export interface RetailerDraft {
+  name: string;
+  shortName: string;
+  channel: string;
+  currentTarget: string;
+  pipelineStatus: string;
+  standing: string;
+  assignedBrokerId: string;
+  tier: string;
+  priority: string;
+  fit: string;
+}
+
+/**
+ * A new retail account.
+ *
+ * Every status value is checked against its own lookup table rather than
+ * against a TypeScript constant, so the database stays the authority on what a
+ * status may be.
+ *
+ * `pipelineStatus` carries one extra rule. The lookup holds sixteen values and
+ * the application's vocabulary covers eleven of them; a row holding one of the
+ * other five would make `loadWorkspace()` throw and take every screen down
+ * with it — see `must()` in workspace.ts. So the value is checked against the
+ * displayed vocabulary as well as the table, and stored in the workbook's
+ * wording via `storedPipelineStatus`.
+ */
+export async function createRetailer(
+  draft: RetailerDraft,
+  clientId: string = DEFAULT_CLIENT_ID,
+): Promise<CreateResult> {
+  const result = await withTransaction<CreateResult>(async (client) => {
+    const { rowCount: hasClient } = await client.query(
+      `select 1 from clients where id = $1`,
+      [clientId],
+    );
+    if (!hasClient) {
+      return {
+        ok: false,
+        changed: [],
+        errors: { form: "This workspace has not been set up yet." },
+      };
+    }
+
+    const errors: FieldErrors = {};
+    const name = draft.name.trim();
+    const shortName = draft.shortName.trim();
+    const channel = draft.channel.trim();
+
+    if (!name) errors.name = "An account needs a name.";
+    else if (name.length > 120) errors.name = "Keep the name under 120 characters.";
+
+    if (!shortName) errors.shortName = "A short name is what tables and chips show.";
+    else if (shortName.length > 40) errors.shortName = "Keep this to a word or two.";
+
+    if (!channel) errors.channel = "Say what kind of retailer this is.";
+    else if (channel.length > 60) errors.channel = "Keep the channel short.";
+
+    /* Stored as the workbook words it, checked as the portal shows it. */
+    const pipelineStatus = storedPipelineStatus(draft.pipelineStatus);
+    if (!PIPELINE_STATUSES.includes(draft.pipelineStatus as PipelineStatus)) {
+      errors.pipelineStatus = "Not a pipeline status this portal can display.";
+    } else if (!(await inLookup(client, "lookup_pipeline_status", pipelineStatus))) {
+      errors.pipelineStatus = "Not a pipeline status the workbook defines.";
+    }
+
+    if (!(await inLookup(client, "lookup_current_target", draft.currentTarget))) {
+      errors.currentTarget = "Not a value the workbook defines.";
+    }
+    if (!(await inLookup(client, "lookup_standing", draft.standing))) {
+      errors.standing = "Not a standing the workbook defines.";
+    }
+
+    /* Optional throughout: an account can be entered before any of this is
+       known, and an empty select is a blank column rather than a guess. */
+    const tier = trimmed(draft.tier);
+    if (tier && !(await inLookup(client, "lookup_tier", tier))) {
+      errors.tier = "Not a tier the workbook defines.";
+    }
+    const priority = trimmed(draft.priority);
+    if (priority && !(await inLookup(client, "lookup_priority", priority))) {
+      errors.priority = "Not a priority the workbook defines.";
+    }
+    const fit = trimmed(draft.fit);
+    if (fit && !(await inLookup(client, "lookup_fit", fit))) {
+      errors.fit = "Not a fit the workbook defines.";
+    }
+
+    /* Nullable, and checked against this client's own brokers — an account
+       cannot be handed to somebody on another client's books. */
+    const assignedBrokerId = trimmed(draft.assignedBrokerId);
+    if (assignedBrokerId) {
+      const { rowCount } = await client.query(
+        `select 1 from brokers where id = $1 and client_id = $2 and archived_at is null`,
+        [assignedBrokerId, clientId],
+      );
+      if (!rowCount) errors.assignedBrokerId = "That broker is not on this client's books.";
+    }
+
+    if (name) {
+      const { rowCount } = await client.query(
+        `select 1 from retailers where client_id = $1 and lower(name) = lower($2)`,
+        [clientId, name],
+      );
+      if (rowCount) errors.name = "This account is already on the books.";
+    }
+
+    if (Object.keys(errors).length > 0) return { ok: false, changed: [], errors };
+
+    const base = slugify(name) || "retailer";
+    let id = base;
+    for (let suffix = 2; suffix < 100; suffix++) {
+      const { rowCount } = await client.query(`select 1 from retailers where id = $1`, [id]);
+      if (!rowCount) break;
+      id = `${base}-${suffix}`;
+    }
+
+    await client.query(
+      `insert into retailers
+         (id, client_id, name, short_name, channel, current_target, pipeline_status,
+          standing, assigned_broker_id, tier, priority, fit, display_order)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+               (select coalesce(max(display_order), 0) + 1
+                  from retailers where client_id = $2))`,
+      [
+        id, clientId, name, shortName, channel,
+        draft.currentTarget, pipelineStatus, draft.standing,
+        assignedBrokerId, tier, priority, fit,
+      ],
+    );
+
+    return { ok: true, errors: {}, changed: [`${name} added`], id };
   });
 
   if (result.ok) resetWorkspace(clientId);

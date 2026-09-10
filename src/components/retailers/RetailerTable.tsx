@@ -1,6 +1,7 @@
 import { AlertCircle, SearchX } from "lucide-react";
 import Link from "next/link";
 
+import { BrokerName } from "@/components/primitives/BrokerName";
 import { EmptyState } from "@/components/primitives/EmptyState";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
 import { RetailerMark } from "@/components/retailer/RetailerMark";
@@ -61,12 +62,7 @@ function Row({ row }: { row: RetailerPipelineRow }) {
       </th>
 
       <td className="py-4 pr-4 text-[13px] leading-5">
-        <Link
-          href={"/brokers/" + broker.id}
-          className="text-ink transition-colors hover:text-forest"
-        >
-          {broker.shortName}
-        </Link>
+        <BrokerName broker={broker} short className="text-ink" />
       </td>
 
       <td className="py-4 pr-4 text-[13px] leading-5 text-ink">
@@ -115,13 +111,18 @@ function Row({ row }: { row: RetailerPipelineRow }) {
               {formatDueDate(nextAction.due) + (overdue ? " · overdue" : "")}
             </span>
           </>
-        ) : (
+        ) : retailer.nextAction ? (
           <>
             <span className="line-clamp-2 text-ink">{retailer.nextAction}</span>
-            <span className="mt-1 block text-ink-faint">
-              {formatDueDate(retailer.nextActionDate)}
-            </span>
+            {/* An undated step still says what it is; only the date is missing. */}
+            {retailer.nextActionDate ? (
+              <span className="mt-1 block text-ink-faint">
+                {formatDueDate(retailer.nextActionDate)}
+              </span>
+            ) : null}
           </>
+        ) : (
+          <Blank />
         )}
       </td>
     </tr>

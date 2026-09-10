@@ -107,8 +107,39 @@ if (!subject) {
 }
 line(dim(`subject: ${subject.name} (${subject.item_id})`));
 
+/**
+ * A precondition, not a check — this suite ends by DELETING.
+ *
+ * It drives the real form against the first unarchived product and finishes
+ * by removing that product's picture, so it is only safe on a workspace where
+ * no picture has been uploaded for real yet. It was written when the database
+ * held exactly one product and no objects, and running it later, against a
+ * book where somebody had uploaded photographs through the portal, destroyed
+ * one of them: the row was cleared and the object deleted, and a deleted
+ * Storage object is not recoverable from the CDN.
+ *
+ * So the imageless slate is now a condition of running at all, checked before
+ * anything is written. If this stops you, the suite has nothing safe to do
+ * here — it is not a failure to work around.
+ */
+const startingObjects = await objects();
+if (subject.image_path !== null || startingObjects.length > 0) {
+  console.log(bad("\n  This suite is destructive, and this workspace is not empty."));
+  line(dim(`${subject.name} already has a picture: ${subject.image_path ?? "no"}`));
+  line(dim(`the bucket holds ${startingObjects.length} object(s)`));
+  line("");
+  line("It uploads, replaces and then REMOVES the picture on the first product,");
+  line("so running it here would destroy an image somebody uploaded for real.");
+  line("Run it against an empty workspace, or use: npm run db:entities");
+  console.log("");
+  await page.close();
+  await db.close();
+  fs.rmSync(scratch, { recursive: true, force: true });
+  process.exit(1);
+}
+
 check("it has no image yet", subject.image_path === null, String(subject.image_path));
-check("and Storage holds nothing", (await objects()).length === 0);
+check("and Storage holds nothing", startingObjects.length === 0);
 
 const detailPath = "/products/" + subject.id;
 const editPath = detailPath + "/edit";
