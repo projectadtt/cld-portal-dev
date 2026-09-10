@@ -50,6 +50,12 @@ export function RetailerKeyDetails({ detail }: { detail: RetailerDetail }) {
        and how hard CLD is pushing for it — so they read as a pair. */
     { label: "Tier", value: retailer.tier ?? <Unrecorded /> },
     { label: "Priority", value: retailer.priority ?? <Unrecorded /> },
+    /* The other two fields the status form edits. The pipeline status itself
+       is already carried by the header badge and the stage indicator, so it is
+       not repeated here — but a change to either of these would otherwise be
+       invisible on the page the form returns to. */
+    { label: "Current / Target", value: retailer.currentTarget },
+    { label: "Standing", value: retailer.standing },
     {
       label: "Samples",
       value: (

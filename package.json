@@ -24,7 +24,8 @@
     "db:media": "node scripts/db/write/media.mjs",
     "db:refresh-check": "node scripts/db/write/refresh-check.mjs",
     "db:entities": "node scripts/db/write/entities.mjs",
-    "db:sparse": "node scripts/db/write/sparse.mjs"
+    "db:sparse": "node scripts/db/write/sparse.mjs",
+    "db:status-edit": "node scripts/db/write/status.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.42.0",

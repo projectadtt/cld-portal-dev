@@ -26,6 +26,7 @@ import type {
   RetailReadiness,
   Priority,
   SampleStatus,
+  Standing,
   Tier,
 } from "@/lib/status";
 
@@ -165,6 +166,14 @@ export interface Retailer {
   /** Absent while the account is unassigned; brokers.id is ON DELETE SET NULL. */
   assignedBrokerId?: BrokerId;
   overallStatus: PipelineStatus;
+  /**
+   * Whether the account is being worked right now.
+   *
+   * NOT NULL with a default of Active, so always present. Read because the
+   * status form edits it: a field that can be written and not read gets reset
+   * to its default by the next person who saves that form.
+   */
+  standing: Standing;
   sampleStatus: SampleStatus;
   fit?: Fit;
   categories: string[];

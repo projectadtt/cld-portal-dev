@@ -28,6 +28,16 @@ export function RetailerHeader({ detail }: { detail: RetailerDetail }) {
         Retailers
       </Link>
 
+      {/* One quiet way into the record, beside the crumb rather than shouting
+          from a toolbar — the same placement the product page uses. It names
+          what it edits, because it is not a way into the whole account. */}
+      <Link
+        href={"/retailers/" + retailer.id + "/edit"}
+        className="type-label float-right transition-colors hover:text-forest"
+      >
+        Edit status
+      </Link>
+
       <div className="mt-5 border-b border-rule pb-8">
         <div className="flex flex-col gap-7 md:flex-row md:items-start md:justify-between md:gap-10">
           <div className="flex min-w-0 items-start gap-5">

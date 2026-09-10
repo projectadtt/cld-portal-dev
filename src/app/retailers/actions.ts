@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth/session";
 import {
   createRetailer,
   setEntityImage,
+  updateRetailerStatus,
   type FieldErrors,
 } from "@/lib/db/mutations";
 import { readImageIntent } from "@/lib/storage/intent";
@@ -82,4 +83,42 @@ export async function createRetailerAction(
   revalidatePath("/", "layout");
 
   redirect("/retailers/" + result.id);
+}
+
+/**
+ * Moving an account along the pipeline.
+ *
+ * Three fields, bound to one account by an id the page supplies rather than
+ * the form: a request cannot redirect this write at another record by adding
+ * a field. Unlike the create action it does not redirect — the person is
+ * already on the account and stays there, so the form reports what moved.
+ */
+export async function updateRetailerStatusAction(
+  retailerId: string,
+  _previous: RetailerFormState,
+  form: FormData,
+): Promise<RetailerFormState> {
+  /* Every server action is a POST endpoint in its own right, reachable
+     whether or not a page ever rendered a form pointing at it. The proxy
+     turns unauthenticated requests away at the perimeter; this is the check
+     that still holds if the perimeter ever does not. */
+  await requireSession();
+
+  const result = await updateRetailerStatus(retailerId, {
+    currentTarget: text(form, "currentTarget"),
+    pipelineStatus: text(form, "pipelineStatus"),
+    standing: text(form, "standing"),
+  });
+
+  if (!result.ok) {
+    return { errors: result.errors, saved: null, savedAt: _previous.savedAt };
+  }
+
+  /* A pipeline status is read by more of the portal than any other retailer
+     field: it sets the Overview funnel, the workstream ordering, the phase an
+     account is grouped under on Retailers, and both reports. The whole tree is
+     revalidated rather than a guessed subset. */
+  revalidatePath("/", "layout");
+
+  return { errors: {}, saved: result.changed, savedAt: Date.now() };
 }

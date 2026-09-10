@@ -1200,6 +1200,113 @@ export async function createRetailer(
   return result;
 }
 
+/** The three fields that say where an account stands today. */
+export interface RetailerStatusEdit {
+  /** lookup_current_target. */
+  currentTarget: string;
+  /** lookup_pipeline_status, in the wording the portal displays. */
+  pipelineStatus: string;
+  /** lookup_standing. */
+  standing: string;
+}
+
+/**
+ * Moving an account along the pipeline.
+ *
+ * Deliberately three fields and no more. They are the ones that change as a
+ * conversation progresses, they are all lookup-backed, and none of them
+ * touches the account's identity — so this write cannot rename a record,
+ * orphan a slug, break a unique constraint or disturb an uploaded logo.
+ * Editing the rest of the account is a later, larger piece of work.
+ *
+ * The pipeline status is checked twice, against two different vocabularies,
+ * because they genuinely differ. The lookup table holds sixteen values; the
+ * portal knows how to render eleven. A row set to one of the other five would
+ * be refused by `must()` in the read layer on the very next render and take
+ * every screen down with it -- so a status this application cannot draw is
+ * refused here, at the point where a person can still be told why.
+ */
+export async function updateRetailerStatus(
+  retailerId: string,
+  edit: RetailerStatusEdit,
+  clientId: string = DEFAULT_CLIENT_ID,
+): Promise<WriteResult> {
+  const result = await withTransaction<WriteResult>(async (client) => {
+    /* Scoped to the workspace and to a live record, and locked for the
+       duration: the same shape updateProduct uses. An id belonging to another
+       client, or to an archived account, finds nothing and is refused. */
+    const { rows } = await client.query<{
+      name: string;
+      current_target: string;
+      pipeline_status: string;
+      standing: string;
+    }>(
+      `select name, current_target, pipeline_status, standing
+         from retailers
+        where id = $1 and client_id = $2 and archived_at is null
+        for update`,
+      [retailerId, clientId],
+    );
+    const existing = rows[0];
+    if (!existing) {
+      return {
+        ok: false,
+        errors: { form: "That account is not on this client's book. Nothing was saved." },
+      };
+    }
+
+    const errors: FieldErrors = {};
+
+    /* Stored as the workbook words it, checked as the portal shows it --
+       the same two-step createRetailer uses, so the two paths cannot drift. */
+    const pipelineStatus = storedPipelineStatus(edit.pipelineStatus);
+    if (!PIPELINE_STATUSES.includes(edit.pipelineStatus as PipelineStatus)) {
+      errors.pipelineStatus = "Not a pipeline status this portal can display.";
+    } else if (!(await inLookup(client, "lookup_pipeline_status", pipelineStatus))) {
+      errors.pipelineStatus = "Not a pipeline status the workbook defines.";
+    }
+
+    if (!(await inLookup(client, "lookup_current_target", edit.currentTarget))) {
+      errors.currentTarget = "Not a value the workbook defines.";
+    }
+    if (!(await inLookup(client, "lookup_standing", edit.standing))) {
+      errors.standing = "Not a standing the workbook defines.";
+    }
+
+    if (Object.keys(errors).length > 0) return { ok: false, errors };
+
+    await client.query(
+      `update retailers
+          set current_target = $1, pipeline_status = $2, standing = $3
+        where id = $4`,
+      [edit.currentTarget, pipelineStatus, edit.standing, retailerId],
+    );
+
+    /* Reported field by field, and only what actually moved. Saving a form
+       nobody changed says so rather than claiming a save that did nothing.
+       The pipeline line is read back in the portal's own wording, because
+       that is what the person on the page just chose. */
+    const changed: string[] = [];
+    if (existing.current_target !== edit.currentTarget) {
+      changed.push(`Current / Target -> ${edit.currentTarget}`);
+    }
+    if (existing.pipeline_status !== pipelineStatus) {
+      changed.push(`Pipeline status -> ${edit.pipelineStatus}`);
+    }
+    if (existing.standing !== edit.standing) {
+      changed.push(`Standing -> ${edit.standing}`);
+    }
+
+    return {
+      ok: true,
+      changed: changed.length > 0 ? changed : ["Nothing changed"],
+    };
+  });
+
+  if (result.ok) resetWorkspace(clientId);
+  return result;
+}
+
 /* ── Images ────────────────────────────────────────────────────────────── */
 
 /**

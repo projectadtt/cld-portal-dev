@@ -36,6 +36,7 @@ import {
   PRIORITIES,
   RETAIL_READINESS,
   SAMPLE_STATUSES,
+  STANDINGS,
   TIERS,
   type MeetingStatus,
   type SampleStatus,
@@ -131,7 +132,7 @@ type RetailerRow = {
   id: string; name: string; short_name: string; channel: string;
   geography: string | null;
   assigned_broker_id: string | null; current_target: string; pipeline_status: string;
-  tier: string | null;
+  tier: string | null; standing: string;
   priority: string | null; fit: string | null; categories: string[];
   approximate_doors: number | null;
   assumed_skus: number | null; units_per_store_week: string | null;
@@ -207,7 +208,7 @@ async function load(clientId: string): Promise<Workspace> {
          from brokers where client_id = $1 and archived_at is null order by display_order, id`, [clientId]),
     () => query<RetailerRow>(
       `select id, name, short_name, channel, geography, assigned_broker_id, current_target,
-              pipeline_status, tier, priority, fit, categories, approximate_doors, assumed_skus,
+              pipeline_status, tier, standing, priority, fit, categories, approximate_doors, assumed_skus,
               units_per_store_week, last_contact::text as last_contact, attention_reason, notes,
               next_meeting_status, next_meeting_at::text as next_meeting_at,
               next_action, next_action_date::text as next_action_date, image_path
@@ -525,6 +526,8 @@ async function load(clientId: string): Promise<Workspace> {
          "no view recorded" rather than a value outside the vocabulary. A
          value the vocabulary does not contain is still an error. */
       tier: maybe(TIERS, r.tier, `retailers.${r.id}.tier`),
+      /* must, not maybe: the column is NOT NULL with a default of Active. */
+      standing: must(STANDINGS, r.standing, `retailers.${r.id}.standing`),
       priority: maybe(PRIORITIES, r.priority, `retailers.${r.id}.priority`),
       assignedBrokerId: (r.assigned_broker_id ?? undefined) as BrokerId | undefined,
       overallStatus: must(
