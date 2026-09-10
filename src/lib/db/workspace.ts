@@ -253,7 +253,11 @@ async function load(clientId: string): Promise<Workspace> {
          join workstream_items w on w.id = f.workstream_item_id
          join retailers r on r.id = w.retailer_id
         where r.client_id = $1
-        order by f.occurred_at asc nulls first, f.id asc`, [clientId]),
+        /* created_at before id: two things said on the same day are normal,
+           and a random uuid would then decide which one counts as the last
+           thing the buyer said. Insertion order is the real answer; id stays
+           only so the sort is total. */
+        order by f.occurred_at asc nulls first, f.created_at asc, f.id asc`, [clientId]),
     () => query<{ id: string; retailer_id: string; name: string; title: string | null; is_primary: boolean }>(
       `select c.id, c.retailer_id, c.name, c.title, c.is_primary
          from contacts c join retailers r on r.id = c.retailer_id
