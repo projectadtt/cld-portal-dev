@@ -25,7 +25,7 @@ export function NextMoves() {
         lead
         title="Next 3 moves"
         description="The most urgent actions right now."
-        action={<SectionLink href="/actions">View all actions</SectionLink>}
+        action={<SectionLink href="/actions" cta>View all actions</SectionLink>}
       />
 
       <ol className="space-y-5">

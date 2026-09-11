@@ -1,7 +1,8 @@
 "use client";
 
+import { Check } from "lucide-react";
 import Link from "next/link";
-import { useActionState, type ReactNode } from "react";
+import { useActionState, useState, type ReactNode } from "react";
 
 import {
   updateMeetingAction,
@@ -91,8 +92,23 @@ export function MeetingEditForm({
   );
   const errors = state.errors;
 
+  /* The completed button has to stop being completed the moment the form stops
+     matching what was saved, or a second correction could never be submitted —
+     a button that is permanently spent is worse than one that never confirmed.
+     The result already carries savedAt, so the two timestamps only have to be
+     compared: no effect, and no second copy of the field values to keep in
+     step with the inputs. */
+  const [editedAt, setEditedAt] = useState(0);
+  const complete = state.saved !== null && editedAt <= state.savedAt;
+
   return (
-    <form action={formAction} className="mt-10 lg:mt-12">
+    <form
+      action={formAction}
+      /* One handler on the form rather than three on the fields: change events
+         from the textareas and the select all bubble to here. */
+      onChange={() => setEditedAt(Date.now())}
+      className="mt-10 lg:mt-12"
+    >
       {errors.form ? (
         <p
           role="alert"
@@ -168,15 +184,32 @@ export function MeetingEditForm({
       </div>
 
       <div className="mt-12 flex flex-wrap items-center gap-x-8 gap-y-4 border-t border-rule pt-6 lg:mt-14">
+        {/* Three states, one button: ready, in flight, and done. The border is
+            on all three so the control keeps its exact size as it changes —
+            a button that resizes under the cursor reads as a glitch rather
+            than as confirmation. */}
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || complete}
           className={cn(
-            "bg-forest px-5 py-2.5 text-[13px] tracking-[0.02em] text-paper transition-opacity",
-            pending ? "opacity-60" : "hover:opacity-90",
+            "inline-flex items-center gap-2 border px-5 py-2.5 text-[13px] tracking-[0.02em] transition-opacity",
+            complete
+              ? "cursor-default border-forest bg-forest-tint font-medium text-forest"
+              : pending
+                ? "border-forest bg-forest text-paper opacity-60"
+                : "border-forest bg-forest text-paper hover:opacity-90",
           )}
         >
-          {pending ? "Saving…" : "Save meeting"}
+          {complete ? (
+            <>
+              <Check size={14} strokeWidth={2.25} aria-hidden="true" />
+              Saved
+            </>
+          ) : pending ? (
+            "Saving…"
+          ) : (
+            "Save meeting"
+          )}
         </button>
 
         <Link

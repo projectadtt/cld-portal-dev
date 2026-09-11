@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AssignedBrokers } from "@/components/overview/AssignedBrokers";
 import { AttentionList } from "@/components/overview/AttentionList";
 import { BuyerFeedback } from "@/components/overview/BuyerFeedback";
 import { NextMoves } from "@/components/overview/NextMoves";
@@ -64,30 +65,49 @@ export default async function OverviewPage() {
           <NextMoves />
         </div>
 
-        {/* What is moving, and the judgement layer beneath it.
-            Paired as two continuous columns rather than two separate rows:
-            the sections have very different natural heights, and stacking
-            them in columns keeps the page from opening up dead space. */}
-        <div className="grid gap-14 lg:grid-cols-[1.35fr_1fr] lg:gap-14">
-          <div className="space-y-14 lg:space-y-16">
+        {/* What is moving, in two bands rather than two free-running columns.
+            Each section is placed on the grid explicitly, so the second band
+            starts on one line across both columns: who is carrying the
+            accounts sits level with what those accounts' buyers said, which is
+            the pairing worth reading across. The cost is some air beneath a
+            short activity list, and that is the right trade — a shared
+            baseline is what makes the page read as composed rather than as two
+            stacks that happen to be side by side.
+
+            Source order is the reading order, so the stack below lg runs
+            progress, brokers, activity, feedback without any reordering. */}
+        <div className="grid items-start gap-14 lg:grid-cols-[1.35fr_1fr] lg:gap-x-14 lg:gap-y-16">
+          <div className="lg:col-start-1 lg:row-start-1">
             <RetailerProgress />
-            <OpportunityMap />
           </div>
 
-          <div className="space-y-14 lg:space-y-16">
-            <section>
-              <SectionHeader
-                title="Recent activity"
-                description="Latest updates across retailers."
-                action={
-                  <SectionLink href="/activity">View all activity</SectionLink>
-                }
-              />
-              <ActivityTimeline activities={recent} />
-            </section>
+          <div className="lg:col-start-1 lg:row-start-2">
+            <AssignedBrokers />
+          </div>
 
+          <section className="lg:col-start-2 lg:row-start-1">
+            <SectionHeader
+              title="Recent activity"
+              description="Latest updates across retailers."
+              action={
+                <SectionLink href="/activity" cta>View all activity</SectionLink>
+              }
+            />
+            <ActivityTimeline activities={recent} />
+          </section>
+
+          <div className="lg:col-start-2 lg:row-start-2">
             <BuyerFeedback />
           </div>
+        </div>
+
+        {/* The one chart on the page, given the full width and centred in it.
+            In a side column it was cramped against its own labels and pulled
+            the left stack out of balance; on its own band it reads as the
+            judgement layer it is, sitting between the work above and what CLD
+            is holding back below. */}
+        <div className="mx-auto w-full max-w-[34rem]">
+          <OpportunityMap />
         </div>
 
         <NotYet />

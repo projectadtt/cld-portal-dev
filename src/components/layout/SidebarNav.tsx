@@ -62,18 +62,31 @@ export function SidebarNav() {
             key={href}
             href={href}
             aria-current={active ? "page" : undefined}
+            /* The indicator changes edge with the axis: a bottom rule while the
+               nav is a horizontal strip, a left rule once it is a column.
+               Inactive items carry the same border in transparent, so the
+               labels stay on one line and nothing shifts as you navigate.
+
+               On the Forest rail the active treatment inverts rather than
+               disappears: the pale-green ground becomes a pale-green wash over
+               the brand colour, and the indicator and label go to Paper, which
+               is the strongest mark available against it. */
             className={cn(
-              "flex shrink-0 items-center gap-2.5 whitespace-nowrap border-b-2 px-6 py-3.5 text-sm transition-colors",
-              "lg:border-b-0 lg:px-8 lg:py-2.5",
+              "group flex shrink-0 items-center gap-2.5 whitespace-nowrap border-b-2 px-6 py-3.5 text-sm transition-colors",
+              "lg:border-b-0 lg:border-l-[3px] lg:px-8 lg:py-2.5",
               active
-                ? "border-forest bg-forest-tint font-medium text-forest"
-                : "border-transparent text-ink-muted hover:bg-rule-soft/50 hover:text-ink",
+                ? "border-forest-tint bg-forest-tint/15 font-semibold text-paper"
+                : "border-transparent text-paper/65 hover:bg-paper/10 hover:text-paper",
             )}
           >
             <Icon
               size={16}
-              strokeWidth={1.75}
-              className={active ? "text-forest" : "text-ink-faint"}
+              strokeWidth={active ? 2 : 1.75}
+              className={
+                active
+                  ? "text-forest-tint"
+                  : "text-paper/45 transition-colors group-hover:text-paper/75"
+              }
             />
             {label}
           </Link>

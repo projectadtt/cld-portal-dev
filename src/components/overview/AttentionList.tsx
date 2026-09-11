@@ -22,7 +22,7 @@ export function AttentionList() {
         lead
         title="What needs attention"
         description="Retailers waiting on a decision or a response."
-        action={<SectionLink href="/workstream">View all</SectionLink>}
+        action={<SectionLink href="/workstream" cta>View all</SectionLink>}
       />
 
       {signals.length > 0 ? (

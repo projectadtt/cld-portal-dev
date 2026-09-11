@@ -1,28 +1,20 @@
-import Link from "next/link";
-
 import { SectionHeader } from "@/components/primitives/SectionHeader";
 import { SectionLink } from "@/components/primitives/SectionLink";
-import { meta } from "@/lib/cn";
-import {
-  UNASSIGNED,
-  getProgressFunnel,
-  getWorkstreamGroups,
-} from "@/lib/selectors";
+import { getProgressFunnel } from "@/lib/selectors";
 
 /**
  * How far the book of accounts has travelled — a funnel, not a reprint of the
  * workstream. Each step is a superset of the one below it, so the shape reads
  * as progression at a glance. One colour; length carries the meaning.
  *
- * The broker roster sits underneath because broker assignment is the client's
- * first-named requirement, and it was otherwise visible only after navigating
- * to the workstream. Each name is a link straight into that broker's filtered
- * book, which is also how the coordination model gets demonstrated.
+ * The broker roster that used to sit underneath is now its own section,
+ * `AssignedBrokers`, so it can line up with what buyers are telling us on the
+ * Overview grid. It was never part of the funnel's reading — it was beneath it
+ * for want of anywhere better.
  */
 export function RetailerProgress() {
   const steps = getProgressFunnel();
   const widest = Math.max(...steps.map((step) => step.count), 1);
-  const groups = getWorkstreamGroups();
 
   return (
     <section>
@@ -31,7 +23,7 @@ export function RetailerProgress() {
         title="Retailer progress"
         description="Retailers that have reached each stage."
         action={
-          <SectionLink href="/workstream">View retail workstream</SectionLink>
+          <SectionLink href="/workstream" cta>View retail workstream</SectionLink>
         }
       />
 
@@ -60,40 +52,6 @@ export function RetailerProgress() {
           </div>
         ))}
       </dl>
-
-      <div className="mt-8 border-t border-rule-soft pt-5">
-        <p className="type-label mb-3.5">Assigned brokers</p>
-
-        <ul className="space-y-3">
-          {groups.map(({ broker, rows }) => {
-            const count =
-              rows.length === 1 ? "1 account" : rows.length + " accounts";
-
-            return (
-              <li
-                key={broker?.id ?? "unassigned"}
-                className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-1"
-              >
-                {/* Accounts with no broker are named here too. This block is
-                    the client's first-named requirement — who is on what —
-                    so an account with nobody on it is the one row that most
-                    needs to be visible, not the one to leave out. */}
-                {broker ? (
-                  <Link
-                    href={"/workstream?broker=" + broker.id}
-                    className="text-sm text-ink transition-colors hover:text-forest"
-                  >
-                    {broker.name}
-                  </Link>
-                ) : (
-                  <span className="text-sm text-ink-muted">{UNASSIGNED}</span>
-                )}
-                <p className="type-label">{meta(broker?.coverage, count)}</p>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
     </section>
   );
 }
