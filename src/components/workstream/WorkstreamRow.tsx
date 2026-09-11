@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/primitives/StatusBadge";
 import { cn } from "@/lib/cn";
 import {
   formatDueDate,
-  formatRelativeDate,
+  formatPastDate,
   getOwnerName,
   isActionOverdue,
   type WorkstreamRow as WorkstreamRowData,
@@ -142,7 +142,7 @@ export function WorkstreamRow({ row }: { row: WorkstreamRowData }) {
 
           <MetaPair label="Last activity">
             {lastActivity ? (
-              formatRelativeDate(lastActivity.date)
+              formatPastDate(lastActivity.date)
             ) : (
               <span className="text-ink-faint">None recorded</span>
             )}

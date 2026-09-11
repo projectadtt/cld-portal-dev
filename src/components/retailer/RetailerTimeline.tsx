@@ -3,6 +3,7 @@ import { CalendarClock } from "lucide-react";
 import { EmptyState } from "@/components/primitives/EmptyState";
 import { cn } from "@/lib/cn";
 import {
+  formatPastDate,
   formatRelativeDate,
   getOwnerName,
   type RetailerEvent,
@@ -50,8 +51,16 @@ export function RetailerTimeline({
             )}
           />
 
+          {/* The one list in the portal that holds both tenses, so the date
+              is read from what became of the entry rather than from the date
+              alone: a meeting still on the book is genuinely ahead and says
+              so, while everything already behind us — including a meeting
+              completed before its scheduled day — reads backward. The same
+              flag that opens the marker above. */}
           <p className="type-label">
-            {formatRelativeDate(event.date) +
+            {(event.upcoming
+              ? formatRelativeDate(event.date)
+              : formatPastDate(event.date)) +
               " · " +
               event.label +
               (event.personId ? " · " + getOwnerName(event.personId) : "")}

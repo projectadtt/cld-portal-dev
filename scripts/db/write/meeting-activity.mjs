@@ -11,7 +11,8 @@
  *   F. what the activity did NOT touch
  *   G. a meeting on an unassigned account
  *   H. transaction safety, in both directions
- *   I. the throwaway database, removed again
+ *   I. how the dates read
+ *   J. the throwaway database, removed again
  *
  * Sections E and H are the reason this suite exists. A history spine that can
  * record the same meeting twice is worse than one that records nothing: the
@@ -618,9 +619,284 @@ check(
   JSON.stringify((await logRows()).map((a) => a.meeting_id)),
 );
 
-/* == I. Removed again ================================================== */
+/* == I. How the dates read ============================================= */
 
-heading("I. The throwaway database, removed again");
+heading("I. How the dates read");
+
+/* An activity is dated to the event it records, and a meeting may be completed
+   before its scheduled day -- so the history spine can legitimately hold a
+   date that is still ahead of today. Nothing that reads an activity date may
+   therefore say "In 3 days": the entry exists because something happened.
+   The account timeline is the one list carrying both tenses, and it chooses by
+   what became of the entry rather than by the date.
+
+   Dates are anchored to DEMO_TODAY = 2026-09-09, which is fixed. */
+const FUTURE = "2026-09-12"; /* +3 -- the production case: completed early */
+const TODAY_ISO = "2026-09-09";
+const YESTERDAY = "2026-09-08";
+const FOUR_AGO = "2026-09-05";
+const FAR_OFF = "2026-08-10"; /* -30, past the relative window */
+const CANCELLED_AHEAD = "2026-09-14"; /* +5, and cancelled */
+
+const { DEMO_TODAY } = await load("src/lib/demo.ts");
+check("DEMO_TODAY is where these dates are measured from", DEMO_TODAY === TODAY_ISO, DEMO_TODAY);
+
+/* A separate account, so none of the assertions above move. Its planning
+   fields are set directly because they are the only source of the timeline's
+   one forward-looking entry -- fixture data in a throwaway database, not a
+   change to how anything writes them. */
+await db.exec(`
+  insert into retailers (id, client_id, name, short_name, channel, assigned_broker_id,
+                         next_meeting_status, next_meeting_at) values
+    ('zz-dates', 'client', 'ZZ Dates Account', 'ZZ Dates', 'Supermarket', 'zz-broker',
+     'Scheduled', '${FUTURE}');
+  insert into meetings (id, retailer_id, scheduled_at, title, status, broker_id) values
+    ('mtg-20', 'zz-dates', '${FUTURE} 10:00:00+00',          'ZZ Held early',   'Scheduled', 'zz-broker'),
+    ('mtg-21', 'zz-dates', '${TODAY_ISO} 10:00:00+00',       'ZZ Held today',   'Scheduled', 'zz-broker'),
+    ('mtg-22', 'zz-dates', '${YESTERDAY} 10:00:00+00',       'ZZ Held late',    'Scheduled', 'zz-broker'),
+    ('mtg-23', 'zz-dates', '${FOUR_AGO} 10:00:00+00',        'ZZ Held midweek', 'Scheduled', 'zz-broker'),
+    ('mtg-24', 'zz-dates', '${FAR_OFF} 10:00:00+00',         'ZZ Held long ago','Scheduled', 'zz-broker'),
+    ('mtg-25', 'zz-dates', '${CANCELLED_AHEAD} 10:00:00+00', 'ZZ Called off',   'Scheduled', 'zz-broker');
+`);
+
+for (const id of ["mtg-20", "mtg-21", "mtg-22", "mtg-23", "mtg-24"]) {
+  const r = await M.updateMeeting(id, {
+    summary: "ZZ It happened.", decisions: "", status: "Completed",
+  });
+  if (!r.ok) check(`${id} completes`, false, JSON.stringify(r.errors));
+}
+const calledOff = await M.updateMeeting("mtg-25", {
+  summary: "", decisions: "", status: "Cancelled",
+});
+check("five are completed and one is cancelled", calledOff.ok === true);
+
+ws = await reread();
+
+/* -- the helper itself ------------------------------------------------- */
+
+check(
+  "formatPastDate says nothing forward-looking about a future date",
+  S.formatPastDate(FUTURE) === "Sep 12",
+  S.formatPastDate(FUTURE),
+);
+check(
+  "and specifically never the words 'In 3 days'",
+  !S.formatPastDate(FUTURE).includes("In "),
+  S.formatPastDate(FUTURE),
+);
+check("today still reads Today", S.formatPastDate(TODAY_ISO) === "Today", S.formatPastDate(TODAY_ISO));
+check("yesterday still reads Yesterday", S.formatPastDate(YESTERDAY) === "Yesterday", S.formatPastDate(YESTERDAY));
+check("four days ago still reads 4 days ago", S.formatPastDate(FOUR_AGO) === "4 days ago", S.formatPastDate(FOUR_AGO));
+check("a far-off date falls back to the short date", S.formatPastDate(FAR_OFF) === "Aug 10", S.formatPastDate(FAR_OFF));
+
+/* The property that makes this safe to apply everywhere: for any date that is
+   actually behind us, the new helper and the old one agree exactly, so no
+   label that is currently right can have changed. They part only ahead of
+   today, which is the whole of the defect. */
+const past = [TODAY_ISO, YESTERDAY, FOUR_AGO, FAR_OFF, "2026-09-04", "2026-09-03", "2026-07-01"];
+check(
+  "for every past date formatPastDate agrees with formatRelativeDate, character for character",
+  past.every((iso) => S.formatPastDate(iso) === S.formatRelativeDate(iso)),
+  JSON.stringify(past.map((iso) => [iso, S.formatPastDate(iso), S.formatRelativeDate(iso)])),
+);
+check(
+  "and they part only ahead of today",
+  S.formatPastDate(FUTURE) !== S.formatRelativeDate(FUTURE) &&
+    S.formatRelativeDate(FUTURE) === "In 3 days",
+  JSON.stringify([S.formatPastDate(FUTURE), S.formatRelativeDate(FUTURE)]),
+);
+check(
+  "formatRelativeDate itself was not touched — it still reads forward when asked",
+  S.formatRelativeDate(FUTURE) === "In 3 days" &&
+    S.formatRelativeDate("2026-09-10") === "Tomorrow",
+);
+check(
+  "relativeDateLabel was not touched either",
+  S.relativeDateLabel(FUTURE) === "In 3 days" && S.relativeDateLabel(FAR_OFF) === undefined,
+);
+check(
+  "pastDateLabel was not touched: it still omits rather than falls back",
+  S.pastDateLabel(FUTURE) === undefined && S.pastDateLabel(FAR_OFF) === undefined &&
+    S.pastDateLabel(YESTERDAY) === "Yesterday",
+);
+
+/* -- Activity: the day headings ---------------------------------------- */
+
+/* What ActivityTimeline renders in its date column, on every surface that
+   mounts it: /activity, the Overview, the account's Activity panel, the
+   broker page, the product page and a meeting's Related activity. */
+const dayLabel = (iso, list = S.getRetailerActivities("zz-dates")) =>
+  S.groupActivityByDay(list).find((d) => d.date === iso)?.label;
+
+check(
+  "a future-dated activity shows its own date, not 'In 3 days'",
+  dayLabel(FUTURE) === "Sep 12",
+  dayLabel(FUTURE),
+);
+check("an activity dated today reads Today", dayLabel(TODAY_ISO) === "Today", dayLabel(TODAY_ISO));
+check("yesterday reads Yesterday", dayLabel(YESTERDAY) === "Yesterday", dayLabel(YESTERDAY));
+check("four days ago reads 4 days ago", dayLabel(FOUR_AGO) === "4 days ago", dayLabel(FOUR_AGO));
+check("older than the window falls back to the short date", dayLabel(FAR_OFF) === "Aug 10", dayLabel(FAR_OFF));
+
+const everyLabel = S.groupActivityByDay(S.getRecentActivity()).map((d) => d.label);
+check(
+  "no day heading anywhere in the whole log reads forward",
+  everyLabel.every((l) => !l.includes("In ") && l !== "Tomorrow"),
+  JSON.stringify(everyLabel),
+);
+check(
+  "the global log reached by /activity is covered by the same change",
+  S.groupActivityByDay(S.getRecentActivity()).find((d) => d.date === FUTURE)?.label === "Sep 12",
+);
+
+/* Ordering is untouched: grouping still runs newest first and the entries
+   inside a day keep the order the read layer gave them. */
+const groupedDates = S.groupActivityByDay(S.getRecentActivity()).map((d) => d.date);
+check(
+  "day groups are still newest first",
+  groupedDates.join() === [...groupedDates].sort().reverse().join(),
+  JSON.stringify(groupedDates),
+);
+check(
+  "a future-dated entry still sorts to the top, because ordering was not changed",
+  groupedDates[0] === FUTURE,
+  JSON.stringify(groupedDates),
+);
+check(
+  "getRecentActivity still returns every row, newest first",
+  S.getRecentActivity().length === ws.activities.length &&
+    S.getRecentActivity()[0].date === FUTURE,
+);
+
+/* -- the account timeline: the one list with two tenses ---------------- */
+
+/* What RetailerTimeline renders, composed exactly as the component does. */
+const timelineDate = (event) =>
+  event.upcoming ? S.formatRelativeDate(event.date) : S.formatPastDate(event.date);
+
+const timeline = S.getRetailerTimeline("zz-dates");
+const ahead = timeline.find((e) => e.upcoming);
+check("the account's scheduled meeting is on the timeline", ahead !== undefined);
+check(
+  "and still reads 'In 3 days', because it genuinely has not happened",
+  timelineDate(ahead) === "In 3 days",
+  timelineDate(ahead),
+);
+
+const held20 = timeline.find((e) => e.id === "mtg-20");
+check("the meeting completed ahead of its day is on the timeline", held20 !== undefined);
+check("it is not marked upcoming, because it is behind us", held20?.upcoming === false);
+check(
+  "so it reads 'Sep 12' rather than 'In 3 days'",
+  timelineDate(held20) === "Sep 12",
+  timelineDate(held20),
+);
+check(
+  "no entry on the timeline reads forward except the one still on the book",
+  timeline.every((e) => e.upcoming || !timelineDate(e).includes("In ")),
+  JSON.stringify(timeline.map((e) => [e.id, e.upcoming, timelineDate(e)])),
+);
+check(
+  "and the historical entries read exactly as they did before, where they were already right",
+  timelineDate(timeline.find((e) => e.id === "mtg-22")) === "Yesterday" &&
+    timelineDate(timeline.find((e) => e.id === "mtg-24")) === "Aug 10",
+);
+
+/* A cancelled meeting never reaches the timeline -- getRetailerMeetings asks
+   what was held, not what is past -- so it cannot read forward there either.
+   Where it IS shown, the Past meetings list, pastDateLabel already answers. */
+check(
+  "a cancelled future-dated meeting is absent from the timeline entirely",
+  !timeline.some((e) => e.id === "mtg-25"),
+  JSON.stringify(timeline.map((e) => e.id)),
+);
+check(
+  "it is still on the Past meetings list, carrying Cancelled",
+  S.getMeetingSummaries().find((p) => p.meeting.id === "mtg-25")?.meeting.status === "Cancelled",
+);
+check(
+  "and that row prints no forward-looking label either",
+  S.pastDateLabel("2026-09-14") === undefined,
+);
+
+/* Dedupe is untouched: every activity here shares its meeting's date, so all
+   of them are superseded by the meeting record on the merged timeline. */
+check(
+  "SUPERSEDED_BY_MEETING still drops the same-day activity from the timeline",
+  !timeline.some((e) => e.id.startsWith("evt-")),
+  JSON.stringify(timeline.map((e) => e.id)),
+);
+check(
+  "including the future-dated one, which is still reachable on the Activity panel",
+  S.getRetailerActivities("zz-dates").some((a) => a.date === FUTURE),
+);
+/* Keyed on the date, which is what the filter actually compares: the read
+   layer does not select meeting_id, so an Activity carries no meeting id to
+   test against here. */
+check(
+  "and a meeting's own Related activity still does not quote itself back",
+  !S.getMeetingDetail("mtg-20").activities.some((a) => a.date === FUTURE) &&
+    S.getMeetingDetail("mtg-22").activities.some((a) => a.date === FUTURE),
+  JSON.stringify(S.getMeetingDetail("mtg-20").activities.map((a) => [a.id, a.date])),
+);
+
+/* -- "Last activity" ---------------------------------------------------- */
+
+/* Three components print this under a label that says "Last activity", so a
+   forward reading is never right there. Asserted through the selectors that
+   actually feed them, not through the helper alone. */
+const lastOn = S.getLastActivity("zz-dates");
+check("the account's last activity is the future-dated one", lastOn?.date === FUTURE, lastOn?.date);
+check(
+  "and it prints as 'Sep 12' rather than 'In 3 days'",
+  S.formatPastDate(lastOn.date) === "Sep 12",
+  S.formatPastDate(lastOn.date),
+);
+
+const wsRow = S.getWorkstreamRows().find((r) => r.retailer.id === "zz-dates");
+check(
+  "the workstream row reads it the same way",
+  S.formatPastDate(wsRow.lastActivity.date) === "Sep 12",
+  S.formatPastDate(wsRow.lastActivity.date),
+);
+const brokerDetail = S.getBrokerDetail("zz-broker");
+const brokerAccount = brokerDetail.accounts.find((a) => a.retailer.id === "zz-dates");
+check(
+  "so does the broker's account row",
+  S.formatPastDate(brokerAccount.lastActivity.date) === "Sep 12",
+  S.formatPastDate(brokerAccount.lastActivity.date),
+);
+check(
+  "and the broker portfolio card",
+  S.formatPastDate(brokerDetail.portfolio.lastActivity.date) === "Sep 12",
+  S.formatPastDate(brokerDetail.portfolio.lastActivity.date),
+);
+
+/* -- nothing else moved ------------------------------------------------ */
+
+const stillUntouched = await db.query(`select
+  (select count(*)::int from meeting_attendees) as attendees,
+  (select count(*)::int from contacts) as contacts,
+  (select count(*)::int from actions) as actions`);
+check(
+  "no attendee, contact or action row appeared while proving any of this",
+  stillUntouched.rows[0].attendees === 0 &&
+    stillUntouched.rows[0].contacts === 0 &&
+    stillUntouched.rows[0].actions === 0,
+  JSON.stringify(stillUntouched.rows[0]),
+);
+check(
+  "every activity still carries occurred_at equal to its meeting's scheduled_at",
+  (
+    await db.query(`select count(*)::int as n from activities a
+       join meetings m on m.id = a.meeting_id
+      where a.occurred_at <> m.scheduled_at`)
+  ).rows[0].n === 0,
+);
+
+/* == J. Removed again ================================================== */
+
+heading("J. The throwaway database, removed again");
 
 await server.stop();
 await db.close();

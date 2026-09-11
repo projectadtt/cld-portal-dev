@@ -213,6 +213,26 @@ export function pastDateLabel(iso: string): string | undefined {
   return undefined;
 }
 
+/**
+ * The backward-only counterpart to `formatRelativeDate`: it never reads
+ * forward. "Today", "Yesterday", "4 days ago", else the plain date.
+ *
+ * For the places that must print a date rather than omit one — a day heading
+ * is the only date in its column, so `pastDateLabel` returning nothing is the
+ * wrong shape there. This supplies the short date `pastDateLabel` deliberately
+ * leaves out, and is composed from both existing helpers rather than repeating
+ * their arithmetic.
+ *
+ * For any date actually behind us this returns exactly what
+ * `formatRelativeDate` returns. The two differ only ahead of today, where
+ * "Tomorrow" and "In 3 days" are the wrong tense for something that has
+ * already happened — an account's history can legitimately hold a future date,
+ * because a meeting may be completed before its scheduled day.
+ */
+export function formatPastDate(iso: string): string {
+  return pastDateLabel(iso) ?? formatShortDate(iso);
+}
+
 /** Future-leaning label: "Today", "Tomorrow", "Sep 10". */
 export function formatDueDate(iso: string): string {
   const delta = daysFromToday(iso);
@@ -679,7 +699,15 @@ export interface RetailerEvent {
   detail?: string;
   decisions?: string[];
   personId?: OwnerId;
-  /** Still ahead of DEMO_TODAY — the one forward-looking entry. */
+  /**
+   * Still on the book — the one forward-looking entry.
+   *
+   * True only for a meeting the account says is still scheduled, which is the
+   * single entry here that has not happened yet. It is read from what became of
+   * the record, never from its date: a meeting completed ahead of its scheduled
+   * day is behind us even though its date is not, so `false` is correct for it
+   * and the date reads backward accordingly.
+   */
   upcoming: boolean;
 }
 
@@ -1496,7 +1524,15 @@ export function getNotYet(): NotYetItem[] {
 
 export interface ActivityDay {
   date: string;
-  /** "Today", "Yesterday", "Sep 6" */
+  /**
+   * "Today", "Yesterday", "4 days ago", "Sep 6" — never forward-looking.
+   *
+   * Activity is the history spine: an entry exists because something already
+   * happened, so no heading here may read "In 3 days". The date itself can
+   * still be ahead of today — an activity is dated to the event it records,
+   * and a meeting can be completed before its scheduled day — which is exactly
+   * why the label is chosen by tense rather than by arithmetic.
+   */
   label: string;
   activities: Activity[];
 }
@@ -1510,7 +1546,7 @@ export function groupActivityByDay(list: Activity[]): ActivityDay[] {
   }
   return [...byDay.entries()].map(([date, entries]) => ({
     date,
-    label: formatRelativeDate(date),
+    label: formatPastDate(date),
     activities: entries,
   }));
 }

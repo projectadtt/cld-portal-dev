@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/primitives/StatusBadge";
 import { cn, meta } from "@/lib/cn";
 import {
   formatDueDate,
-  formatRelativeDate,
+  formatPastDate,
   type BrokerPortfolio,
 } from "@/lib/selectors";
 import { pipelineTone } from "@/lib/status";
@@ -82,7 +82,7 @@ export function BrokerPortfolioCard({
                   {lastActivity.description}
                 </span>
                 <span className="mt-1 block text-[13px] text-ink-faint">
-                  {formatRelativeDate(lastActivity.date)}
+                  {formatPastDate(lastActivity.date)}
                 </span>
               </>
             ) : (

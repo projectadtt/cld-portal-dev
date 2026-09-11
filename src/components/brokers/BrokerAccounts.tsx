@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/primitives/StatusBadge";
 import { cn, meta } from "@/lib/cn";
 import {
   formatDueDate,
-  formatRelativeDate,
+  formatPastDate,
   type BrokerAccount,
 } from "@/lib/selectors";
 import { itemStatusTone, pipelineTone, sampleStatusTone } from "@/lib/status";
@@ -122,7 +122,7 @@ export function BrokerAccounts({ accounts }: { accounts: BrokerAccount[] }) {
 
                 <MetaPair label="Last activity">
                   {lastActivity ? (
-                    formatRelativeDate(lastActivity.date)
+                    formatPastDate(lastActivity.date)
                   ) : (
                     <span className="text-ink-faint">None recorded</span>
                   )}
