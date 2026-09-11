@@ -179,7 +179,7 @@ type MeetingRow = {
 };
 type ActivityRow = {
   id: string; occurred_on: string; type: string; retailer_id: string;
-  product_id: string | null; person_id: string; description: string;
+  product_id: string | null; person_id: string | null; description: string;
 };
 type OpportunityRow = {
   id: string; title: string; type: string | null; signal: string | null;
@@ -601,7 +601,11 @@ async function load(clientId: string): Promise<Workspace> {
     type: must(ACTIVITY_TYPES, a.type, `activities.${a.id}.type`),
     retailerId: a.retailer_id as RetailerId,
     productId: (a.product_id ?? undefined) as ProductId | undefined,
-    personId: a.person_id as OwnerId,
+    /* Nullable and ON DELETE SET NULL, like every other person reference in
+       the schema. An entry derived from a meeting on an unassigned account
+       carries nobody, and the read layer says so rather than handing a
+       component an id that resolves to nothing. */
+    personId: (a.person_id ?? undefined) as OwnerId | undefined,
     description: a.description,
   }));
 

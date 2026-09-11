@@ -312,7 +312,16 @@ export interface Activity {
   type: ActivityType;
   retailerId: RetailerId;
   productId?: ProductId;
-  personId: OwnerId;
+  /**
+   * Who logged it, which may be nobody.
+   *
+   * activities.person_id is nullable and ON DELETE SET NULL, so an entry can
+   * legitimately carry no broker — one derived from a meeting nobody is
+   * assigned to, or one left behind when a broker was removed. Every reader
+   * goes through `getOwnerName`, which names the gap rather than inventing a
+   * person to fill it.
+   */
+  personId?: OwnerId;
   description: string;
 }
 

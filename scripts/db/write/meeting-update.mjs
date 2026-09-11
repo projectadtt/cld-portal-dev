@@ -11,7 +11,7 @@
  *   F. emptying the fields again
  *   G. what the write layer refuses
  *   H. what updateMeeting cannot reach
- *   I. what updateMeeting did NOT touch
+ *   I. what updateMeeting did NOT touch, and the one thing it now does
  *   J. which way the date reads
  *   K. the throwaway database, removed again
  *
@@ -494,9 +494,9 @@ check("title is still ZZ Range view", m1.title === "ZZ Range view", m1.title);
 check("scheduled_at is still 2026-09-15 10:00", m1.at === "2026-09-15 10:00", m1.at);
 check("location is still ZZ Head office", m1.location === "ZZ Head office", m1.location);
 
-/* == I. What updateMeeting did NOT touch =============================== */
+/* == I. What updateMeeting did NOT touch ================================ */
 
-heading("I. What updateMeeting did NOT touch");
+heading("I. What updateMeeting did NOT touch, and the one thing it now does");
 
 const untouched = await db.query(`select
   (select count(*)::int from activities) as activities,
@@ -509,7 +509,26 @@ const untouched = await db.query(`select
   (select count(*)::int from meetings) as meetings`);
 const u = untouched.rows[0];
 
-check("no activity row was created", u.activities === 0, `${u.activities}`);
+/* The one exception, and the only one: completing mtg-01 in section D filed a
+   "Meeting completed" activity, because an account's history has to record
+   that the meeting was held. Section E's cancellation and section F's two
+   re-saves added nothing, so the count is still exactly one — which is the
+   interesting half of the assertion. The dedicated proof of that write lives
+   in db:meeting-activity; here it is held to a number so this suite would
+   notice if the edit path started filing extra rows. */
+check(
+  "exactly one activity row exists — the completion, and nothing since",
+  u.activities === 1,
+  `${u.activities}`,
+);
+check(
+  "and it belongs to the meeting that was completed",
+  (
+    await db.query(
+      `select meeting_id, type from activities`,
+    )
+  ).rows.every((a) => a.meeting_id === "mtg-01" && a.type === "Meeting completed"),
+);
 check("no attendee row was created", u.attendees === 0, `${u.attendees}`);
 check("no contact row was created", u.contacts === 0, `${u.contacts}`);
 check("no action row was created", u.actions === 0, `${u.actions}`);

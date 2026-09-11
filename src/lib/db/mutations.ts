@@ -1620,10 +1620,13 @@ export interface MeetingEdit {
  * to another account, rewrite its history, or break a relationship.
  *
  * The status transition is the interesting one. Scheduled -> Completed moves
- * the meeting out of Upcoming and into Past, and that is the whole of its
- * effect: no activity row, no action, no change to the account's planning
- * fields or to any workstream item. Each of those is a separate phase, and
- * doing a piece of one here would be the start of two sources of truth.
+ * the meeting out of Upcoming and into Past, and files the one activity row
+ * the portal writes: the account's history spine has to record that the
+ * meeting was held, because a meeting record alone is not an account history.
+ * Nothing else follows from it -- no action, no change to the account's
+ * planning fields or to any workstream item. Each of those is a separate
+ * phase, and doing a piece of one here would be the start of two sources of
+ * truth.
  */
 export async function updateMeeting(
   meetingId: string,
@@ -1698,6 +1701,66 @@ export async function updateMeeting(
       [summary, decisions, edit.status, meetingId],
     );
 
+    /* One transition, and only this one, is also an event on the account.
+       Scheduled -> Completed is the moment a meeting stops being a plan and
+       becomes something that happened, and the activity log is where the
+       account's history is read from. The other five transitions write
+       nothing: a cancellation is a diary change, and re-saving the notes on a
+       meeting that was already completed is not a second meeting.
+
+       Two guards, for two different failure modes. The transition gate below
+       is the logical one, and the `for update of m` lock taken at the top of
+       this transaction is what makes it hold under concurrency -- a second
+       request editing the same meeting waits, then reads 'Completed' and
+       falls through. The `not exists` clause inside the statement is the
+       durable one: "this meeting was held" is a fact that is either on the
+       record or not, so it can never be on it twice, whatever route a future
+       write path takes to get here -- including re-opening a completed
+       meeting and completing it again. Neither needed a migration; the
+       existing activities_meeting_idx already indexes the lookup. */
+    let logged = false;
+    if (existing.status === "Scheduled" && edit.status === "Completed") {
+      /* Ids stay in the readable evt-NN series the activity log already uses.
+         Two simultaneous inserts would collide on the primary key and the
+         second transaction would fail loudly, which is the same bargain
+         createMeeting makes: nothing is silently renumbered. */
+      const { rows: nextIdRows } = await client.query<{ next: string }>(
+        `select 'evt-' || lpad((coalesce(max(substring(id from 5)::integer), 0) + 1)::text, 2, '0') as next
+           from activities where id ~ '^evt-[0-9]+$'`,
+      );
+
+      /* Every column is copied from the meeting row this transaction just
+         wrote and still holds locked, so no fact is retyped on the way
+         through: the account, the broker carrying it, and the moment it
+         happened are the meeting's own, not a second opinion about them.
+
+         occurred_at is the meeting's scheduled_at rather than now(). The event
+         being logged is the meeting, and the meeting happened when it was
+         held -- dating the account's history to the moment somebody submitted
+         a form would put a Sep 15 meeting on the log under Sep 11 for no
+         reason a reader could follow.
+
+         description carries the meeting's title and nothing else. The type
+         supplies "Meeting completed", the retailer and the broker are reached
+         through their keys, and the summary is deliberately not copied: this
+         table is append-only, so a duplicated summary could never be
+         corrected when the write-up is edited. */
+      const { rowCount } = await client.query(
+        `insert into activities
+           (id, retailer_id, occurred_at, type, description, person_id, meeting_id, is_system)
+         select $1, m.retailer_id, m.scheduled_at, 'Meeting completed', m.title,
+                m.broker_id, m.id, true
+           from meetings m
+          where m.id = $2
+            and not exists (
+              select 1 from activities a
+               where a.meeting_id = m.id and a.type = 'Meeting completed'
+            )`,
+        [nextIdRows[0].next, meetingId],
+      );
+      logged = rowCount === 1;
+    }
+
     /* Reported field by field, and only what actually moved. Saving a form
        nobody changed says so rather than claiming a save that did nothing. */
     const changed: string[] = [];
@@ -1716,6 +1779,10 @@ export async function updateMeeting(
             : `${decisions.length} decisions recorded`,
       );
     }
+    /* Reported because it is a second record the save created, somewhere the
+       user was not looking. Reported from the row count rather than from the
+       transition, so it cannot claim a write the duplicate guard refused. */
+    if (logged) changed.push("Logged on the account's activity");
 
     return {
       ok: true,
