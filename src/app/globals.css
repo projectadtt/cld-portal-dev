@@ -24,6 +24,21 @@
   --color-forest-tint: #edf1ec; /* selected / active nav / current filter */
   --color-red-tint: #fceeee; /* attention rows only */
 
+  /* Amber — the sixth hue, added for the Overview tiles.
+     It carries one meaning: waiting on the buyer. That state is not a risk,
+     so Red would overstate it, and not our own work, so Forest would claim
+     progress we have not made. Nothing else may use it. */
+  --color-amber: #d97a2b;
+  --color-amber-tint: #fdf3ea;
+
+  /* Card surface — the Overview's tile treatment.
+     One radius and one shadow, shared, so no tile can drift from another.
+     The shadow is deliberately almost invisible: it lifts a tile off the
+     ground without turning the page into a stack of floating panels. */
+  --radius-card: 0.625rem;
+  --shadow-card:
+    0 1px 2px rgb(21 24 21 / 0.04), 0 1px 3px rgb(21 24 21 / 0.03);
+
   /* Editorial label scale (11px, uppercase, tracked) */
   --text-label: 0.6875rem;
   --text-label--line-height: 1rem;

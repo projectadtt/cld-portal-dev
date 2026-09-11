@@ -32,9 +32,15 @@ export function AttentionList() {
           ))}
         </div>
       ) : (
+        /* Boxed: this sits in a column beside a section that is full, where a
+           bare grey line reads as a failure to load rather than as good news.
+           The second line says what the first one covers — every account on
+           the book, not merely the ones in view. */
         <EmptyState
+          boxed
           icon={CheckCircle2}
           message="Nothing is waiting on a decision right now."
+          detail="Every account on the book is either moving or already answered."
         />
       )}
     </section>

@@ -39,7 +39,7 @@ export function SectionLink({ href, children, cta = false }: SectionLinkProps) {
                looking lopsided. leading-none is what makes the label sit
                evenly — without it the inherited body line-height pads the top
                and bottom unequally against the text's own cap height. */
-            "bg-forest px-3.5 py-2 text-[12px] leading-none tracking-[0.02em] text-paper transition-opacity hover:opacity-90"
+            "rounded-md bg-forest px-3.5 py-2 text-[12px] leading-none tracking-[0.02em] text-paper transition-opacity hover:opacity-90"
           : "gap-1.5 text-[13px] text-ink-muted hover:text-forest",
       )}
     >

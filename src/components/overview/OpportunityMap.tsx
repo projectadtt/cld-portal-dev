@@ -1,3 +1,6 @@
+import { ScatterChart } from "lucide-react";
+
+import { EmptyState } from "@/components/primitives/EmptyState";
 import { SectionHeader } from "@/components/primitives/SectionHeader";
 import { getOpportunityMap, type OpportunityMapPoint } from "@/lib/selectors";
 
@@ -98,6 +101,29 @@ function placeLabels(
 export function OpportunityMap() {
   const points = getOpportunityMap();
 
+  /* Both axes are derived, so an account only appears once it has volume
+     inputs and a recorded fit. Until one does, there is nothing to plot —
+     and an empty pair of axes is worse than no chart at all: it looks like a
+     chart that failed rather than a question nobody has answered yet. The
+     arithmetic below would also run on an empty set, where Math.min() is
+     Infinity and every coordinate comes out NaN. */
+  if (points.length === 0) {
+    return (
+      <section>
+        <SectionHeader
+          title="Opportunity map"
+          description="Unit opportunity against how ready each account is to convert today."
+        />
+        <EmptyState
+          boxed
+          icon={ScatterChart}
+          message="No account can be placed yet."
+          detail="Both axes are derived, so an account appears once it has volume inputs and a recorded fit."
+        />
+      </section>
+    );
+  }
+
   /* Scale to the accounts actually plotted, padded, rather than a fixed
      0–100 box. The axes carry no ticks — they read low-to-high — so fitting
      the domain to the data spreads the marks instead of stranding them all
@@ -117,9 +143,14 @@ export function OpportunityMap() {
         description="Unit opportunity against how ready each account is to convert today."
       />
 
+      {/* The heading keeps the page's left margin with every other section;
+          only the drawing is centred, and its legend travels with it so the
+          rule beneath the chart matches the chart's own width rather than
+          running the full measure under a narrower picture. */}
+      <div className="mx-auto w-full max-w-[34rem]">
       <svg
         viewBox="0 0 320 236"
-        className="h-auto w-full max-w-[34rem]"
+        className="h-auto w-full"
         role="img"
         aria-label="Retail accounts plotted by market opportunity against brand readiness."
       >
@@ -209,6 +240,7 @@ export function OpportunityMap() {
           />
           Not started yet
         </p>
+      </div>
       </div>
     </section>
   );

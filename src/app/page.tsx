@@ -42,19 +42,31 @@ export default async function OverviewPage() {
 
   return (
     <>
+      {/* Who is looking and when, on one line above the title.
+          It used to sit as a stacked block to the right of the headline,
+          where it competed with it for the same corner. As a strip it is
+          read once on arrival and then ignored, which is all it is for.
+
+          Built here rather than in PageHeader because that component opens
+          all ten screens, and this is the Overview's turn only. */}
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 border-b border-rule pb-4">
+        <p className="type-label flex items-center gap-2">
+          <span aria-hidden="true" className="size-1.5 rounded-full bg-forest" />
+          Client portal
+        </p>
+
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+          <p className="type-label text-ink">
+            {"Client: " + client.name + " · " + client.workspace}
+          </p>
+          <p className="type-label">{"As of " + formatLongDate(DEMO_TODAY)}</p>
+        </div>
+      </div>
+
       <PageHeader
-        eyebrow="Client portal"
         title="Here's where things stand."
         description="Real progress. A clear plan. The right order."
-      >
-        <div className="sm:text-right">
-          <p className="type-label">Client</p>
-          <p className="mt-1.5 text-sm text-ink">
-            {client.name + " · " + client.workspace}
-          </p>
-          <p className="type-label mt-3">{"As of " + formatLongDate(DEMO_TODAY)}</p>
-        </div>
-      </PageHeader>
+      />
 
       <ProgressSummary />
 
@@ -101,14 +113,16 @@ export default async function OverviewPage() {
           </div>
         </div>
 
-        {/* The one chart on the page, given the full width and centred in it.
-            In a side column it was cramped against its own labels and pulled
-            the left stack out of balance; on its own band it reads as the
-            judgement layer it is, sitting between the work above and what CLD
-            is holding back below. */}
-        <div className="mx-auto w-full max-w-[34rem]">
-          <OpportunityMap />
-        </div>
+        {/* The one chart on the page, on its own band. In a side column it was
+            cramped against its own labels and pulled the left stack out of
+            balance; here it reads as the judgement layer it is, sitting
+            between the work above and what CLD is holding back below.
+
+            The section spans the measure so its heading stays on the same left
+            margin as every other section; the drawing centres itself within
+            it. Centring the whole section indented the heading and read as a
+            mistake rather than as composition. */}
+        <OpportunityMap />
 
         <NotYet />
       </div>

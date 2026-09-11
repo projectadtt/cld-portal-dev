@@ -4,23 +4,30 @@ import { getOverviewMetrics } from "@/lib/selectors";
 /**
  * Where things stand, in five figures.
  *
- * Still an editorial rule rather than a row of KPI cards — no tiles, no
- * shadows, no trend arrows, no icons. The numbers are context for the sections
- * below, not the point of the page (CLAUDE.md §7).
+ * Tiles rather than the editorial rule the rest of the portal uses: these five
+ * are the one place on the page where the reader is scanning for a number
+ * instead of reading a sentence, and a tile is what makes a number findable.
+ * They stay quiet about it — one radius, a hairline, and a shadow you have to
+ * look for — so the page still opens with the headline rather than with a row
+ * of panels.
  *
- * Each figure carries a 2px edge and a very pale ground so the five read as
- * five distinct counts rather than one block of digits. The colour says which
- * side of the relationship the number describes: forest for the work CLD is
- * doing, and a single restrained warm figure for the accounts that have
- * reached a conversation with the buyer — the one count that is about them
- * rather than about us. The figures themselves stay in Ink and the labels stay
- * quiet, so the accent differentiates without competing.
+ * The 4px edge is the only colour, and it says which side of the relationship
+ * the number describes: Forest for work CLD is doing, neutral for a fact with
+ * no side to it, Amber for an account now waiting on the buyer, and Red for
+ * the one count that is a live conversation. Only that last tile takes a
+ * ground and a coloured figure, so the eye lands on it once and not five
+ * times.
  */
 
-/** Forest for the work being done; warm, once only, for the buyer's side. */
 const TONE = {
-  work: "border-forest bg-forest-tint/40",
-  buyer: "border-red/60 bg-red-tint/50",
+  /** Work CLD is doing. */
+  work: { edge: "border-l-forest", ground: "bg-paper", figure: "text-ink", label: "text-ink-faint" },
+  /** A fact with no side to it. */
+  neutral: { edge: "border-l-rule", ground: "bg-paper", figure: "text-ink", label: "text-ink-faint" },
+  /** Handed over — now waiting on the buyer. */
+  review: { edge: "border-l-amber", ground: "bg-paper", figure: "text-ink", label: "text-ink-faint" },
+  /** A live conversation. The only tile that colours its own figure. */
+  buyer: { edge: "border-l-red", ground: "bg-red-tint/60", figure: "text-red", label: "text-red/80" },
 } as const;
 
 export function ProgressSummary() {
@@ -31,32 +38,44 @@ export function ProgressSummary() {
     { value: m.retailersInProgress, label: "Retailers in progress", tone: "work" },
     /* Counted in SKUs, not retailers — the funnel below counts retailers,
        and two figures labelled the same way with different units confuse. */
-    { value: m.samplesSent, label: "SKU samples sent", tone: "work" },
-    { value: m.retailersInReview, label: "Retailers in review", tone: "work" },
+    { value: m.samplesSent, label: "SKU samples sent", tone: "neutral" },
+    { value: m.retailersInReview, label: "Retailers in review", tone: "review" },
     { value: m.buyerDiscussions, label: "Buyer discussions", tone: "buyer" },
   ] as const;
 
   return (
-    <dl className="grid grid-cols-2 gap-3 border-y border-rule py-5 sm:grid-cols-3 lg:grid-cols-5">
-      {figures.map((figure) => (
-        <div
-          key={figure.label}
-          /* Two columns on mobile, three at sm, five at lg — unchanged. The
-             per-cell edge replaces the hairline divider it used to carry,
-             which is what removes the old per-breakpoint suppression: every
-             cell now owns its own rule, so none has to be cancelled at the
-             start of a row. */
-          className={cn(
-            "flex flex-col-reverse gap-1.5 border-l-2 py-1 pl-3.5",
-            TONE[figure.tone],
-          )}
-        >
-          <dt className="type-label">{figure.label}</dt>
-          <dd className="font-display text-[1.75rem] leading-none text-ink">
-            {figure.value}
-          </dd>
-        </div>
-      ))}
+    <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 lg:gap-4">
+      {figures.map((figure) => {
+        const tone = TONE[figure.tone];
+
+        return (
+          <div
+            key={figure.label}
+            /* Two columns on mobile, three at sm, five at lg.
+
+               The figures have to sit on one line across the row. Two things
+               put them there. `justify-end` packs the content at the top of
+               the tile — in a reversed column the main axis runs upward, so
+               end is the top — which pins every figure to the same height
+               however tall its tile grows. And the label reserves two lines
+               whether it needs them or not, so a tile whose label wraps does
+               not push its own figure up while its neighbour's stays down.
+               Without both, the row staggered like a camel's back. */
+            className={cn(
+              "flex flex-col-reverse justify-end gap-2 rounded-card border border-rule border-l-4 px-4 py-4 shadow-card",
+              tone.edge,
+              tone.ground,
+            )}
+          >
+            <dt className={cn("type-label min-h-8", tone.label)}>
+              {figure.label}
+            </dt>
+            <dd className={cn("font-display text-[1.75rem] leading-none", tone.figure)}>
+              {figure.value}
+            </dd>
+          </div>
+        );
+      })}
     </dl>
   );
 }

@@ -50,8 +50,12 @@ export function SidebarNav() {
       /* Below lg the nav is a horizontal strip. Paint containment keeps its
          scrolled-out items from widening the document, the same propagation
          that made the account page scroll sideways; above lg it is an ordinary
-         column and must not clip anything. */
-      className="flex overflow-x-auto [contain:paint] lg:mt-8 lg:flex-col lg:overflow-x-visible lg:[contain:none]"
+         column and must not clip anything.
+
+         No scrollbar here, deliberately. The rail is short enough to hold all
+         ten items outright, and a list that fits is worth more than one that
+         scrolls — so the room comes out of the spacing instead. */
+      className="flex overflow-x-auto [contain:paint] lg:mt-4 lg:flex-col lg:gap-0.5 lg:overflow-x-visible lg:px-4 lg:[contain:none]"
     >
       {NAV.map(({ href, label, icon: Icon }) => {
         const active =
@@ -62,23 +66,31 @@ export function SidebarNav() {
             key={href}
             href={href}
             aria-current={active ? "page" : undefined}
-            /* The indicator changes edge with the axis: a bottom rule while the
-               nav is a horizontal strip, a left rule once it is a column.
-               Inactive items carry the same border in transparent, so the
-               labels stay on one line and nothing shifts as you navigate.
+            /* Two shapes for two axes. While the nav is a horizontal strip the
+               active item is marked by a rule along its bottom edge, which is
+               the only edge a strip can carry. Once it is a column it becomes
+               an inset rounded item, and the mark moves inside it: a short
+               pill against its left edge, because a border on a rounded box
+               bends around the corners and stops reading as an indicator.
 
-               On the Forest rail the active treatment inverts rather than
-               disappears: the pale-green ground becomes a pale-green wash over
-               the brand colour, and the indicator and label go to Paper, which
-               is the strongest mark available against it. */
+               Inactive items keep the bottom border in transparent so nothing
+               shifts as you navigate the strip; in the column they need no
+               reservation, since the pill is positioned rather than laid out. */
             className={cn(
-              "group flex shrink-0 items-center gap-2.5 whitespace-nowrap border-b-2 px-6 py-3.5 text-sm transition-colors",
-              "lg:border-b-0 lg:border-l-[3px] lg:px-8 lg:py-2.5",
+              "group relative flex shrink-0 items-center gap-2.5 whitespace-nowrap border-b-2 px-6 py-3.5 text-sm transition-colors",
+              "lg:rounded-lg lg:border-b-0 lg:px-3.5 lg:py-2",
               active
                 ? "border-forest-tint bg-forest-tint/15 font-semibold text-paper"
                 : "border-transparent text-paper/65 hover:bg-paper/10 hover:text-paper",
             )}
           >
+            {active ? (
+              <span
+                aria-hidden="true"
+                className="absolute top-1/2 left-0 hidden h-5 w-[3px] -translate-y-1/2 rounded-full bg-forest-tint lg:block"
+              />
+            ) : null}
+
             <Icon
               size={16}
               strokeWidth={active ? 2 : 1.75}
