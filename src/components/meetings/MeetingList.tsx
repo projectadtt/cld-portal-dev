@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/primitives/StatusBadge";
 import { meta } from "@/lib/cn";
 import {
   formatLongDate,
-  relativeDateLabel,
+  pastDateLabel,
   UNASSIGNED,
   type MeetingSummary,
 } from "@/lib/selectors";
@@ -53,9 +53,11 @@ export function MeetingList({ summaries }: { summaries: MeetingSummary[] }) {
               <p className="text-[13px] leading-5 text-ink">
                 {formatLongDate(meeting.date)}
               </p>
-              {relativeDateLabel(meeting.date) ? (
+              {/* Backward-only: every row here is behind us, and a meeting
+                  written up ahead of its date must not read "in 6 days". */}
+              {pastDateLabel(meeting.date) ? (
                 <p className="type-label mt-1">
-                  {relativeDateLabel(meeting.date)}
+                  {pastDateLabel(meeting.date)}
                 </p>
               ) : null}
             </div>

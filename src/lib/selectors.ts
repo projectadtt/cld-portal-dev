@@ -190,6 +190,29 @@ export function relativeDateLabel(iso: string): string | undefined {
   return relative === formatShortDate(iso) ? undefined : relative;
 }
 
+/**
+ * Backward-only label: "Today", "Yesterday", "4 days ago", else nothing.
+ *
+ * For a record that is already behind us. `relativeDateLabel` will happily say
+ * "In 6 days", which is right for something still ahead and wrong for
+ * something finished — and a meeting completed before its scheduled day is a
+ * real state, not a mistake, so the two readings had to be separated rather
+ * than have one of them patched.
+ *
+ * Nothing is returned where no backward phrase fits: a meeting written up
+ * ahead of its date has no honest relative wording, and the date printed
+ * beside it already says everything true. Far-off past dates return nothing
+ * too, for the same reason `relativeDateLabel` drops them — the date is
+ * already on screen and repeating it says nothing twice.
+ */
+export function pastDateLabel(iso: string): string | undefined {
+  const delta = daysFromToday(iso);
+  if (delta === 0) return "Today";
+  if (delta === -1) return "Yesterday";
+  if (delta < 0 && delta >= -6) return -delta + " days ago";
+  return undefined;
+}
+
 /** Future-leaning label: "Today", "Tomorrow", "Sep 10". */
 export function formatDueDate(iso: string): string {
   const delta = daysFromToday(iso);

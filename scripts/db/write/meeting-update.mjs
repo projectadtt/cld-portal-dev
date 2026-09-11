@@ -12,7 +12,8 @@
  *   G. what the write layer refuses
  *   H. what updateMeeting cannot reach
  *   I. what updateMeeting did NOT touch
- *   J. the throwaway database, removed again
+ *   J. which way the date reads
+ *   K. the throwaway database, removed again
  *
  * Section H is the reason this suite matters more than most. updateMeeting is
  * the first edit path in the portal, and the interesting question about an
@@ -538,9 +539,152 @@ check(
   !allText.includes('"null"') && !allText.includes('"undefined"'),
 );
 
-/* == J. Removed again ================================================== */
+/* == J. Which way the date reads ======================================= */
 
-heading("J. The throwaway database, removed again");
+heading("J. Which way the date reads");
+
+/*
+ * DEMO_TODAY is 2026-09-09, so the dates below are chosen by their distance
+ * from it: +6 future, 0 today, -1 yesterday, -4 within the week, -30 far off.
+ *
+ * The bug this covers: a meeting completed before its scheduled day is
+ * ordinary -- it is exactly what happened to the production Range View record
+ * -- and the Past list was describing it as "In 6 days". A record behind us
+ * must never be described as ahead.
+ */
+const FUTURE = "2026-09-15";
+const TODAY_ISO = "2026-09-09";
+const YESTERDAY = "2026-09-08";
+const FOUR_AGO = "2026-09-05";
+const FAR_OFF = "2026-08-10";
+
+/* The forward-looking label is untouched, and still right for what is ahead. */
+check(
+  "relativeDateLabel still says In 6 days for a future date",
+  S.relativeDateLabel(FUTURE) === "In 6 days",
+  S.relativeDateLabel(FUTURE),
+);
+check(
+  "a Scheduled meeting keeps that reading — Upcoming is unchanged",
+  S.getUpcomingMeetings().length === 0 ||
+    S.relativeDateLabel(FUTURE) === "In 6 days",
+);
+
+/* The backward-only label, which is what the Past list now uses. */
+check(
+  "pastDateLabel says nothing for a future date",
+  S.pastDateLabel(FUTURE) === undefined,
+  String(S.pastDateLabel(FUTURE)),
+);
+check(
+  "and specifically never the words 'In 6 days'",
+  S.pastDateLabel(FUTURE) !== "In 6 days" &&
+    !String(S.pastDateLabel(FUTURE)).startsWith("In "),
+);
+check("today reads Today", S.pastDateLabel(TODAY_ISO) === "Today", S.pastDateLabel(TODAY_ISO));
+check(
+  "one day ago reads Yesterday",
+  S.pastDateLabel(YESTERDAY) === "Yesterday",
+  S.pastDateLabel(YESTERDAY),
+);
+check(
+  "four days ago reads 4 days ago",
+  S.pastDateLabel(FOUR_AGO) === "4 days ago",
+  S.pastDateLabel(FOUR_AGO),
+);
+check(
+  "a far-off past date falls back to no relative label",
+  S.pastDateLabel(FAR_OFF) === undefined,
+  String(S.pastDateLabel(FAR_OFF)),
+);
+check(
+  "which is the same fallback relativeDateLabel makes, so the date stands alone",
+  S.relativeDateLabel(FAR_OFF) === undefined,
+  String(S.relativeDateLabel(FAR_OFF)),
+);
+
+/*
+ * Now against real rows, which is what the Past list actually renders. Both
+ * are future-dated, one Completed and one Cancelled, reproducing the reported
+ * defect on both statuses.
+ */
+await db.query(
+  `insert into meetings (id, retailer_id, scheduled_at, title, status, broker_id) values
+     ('mtg-10', 'zz-account', $1::timestamptz, 'ZZ Completed ahead of its date', 'Completed', 'zz-broker'),
+     ('mtg-11', 'zz-account', $1::timestamptz, 'ZZ Cancelled ahead of its date', 'Cancelled', 'zz-broker'),
+     ('mtg-12', 'zz-account', $2::timestamptz, 'ZZ Completed yesterday',         'Completed', 'zz-broker'),
+     ('mtg-13', 'zz-account', $3::timestamptz, 'ZZ Completed four days ago',     'Completed', 'zz-broker'),
+     ('mtg-14', 'zz-account', $4::timestamptz, 'ZZ Completed long ago',          'Completed', 'zz-broker'),
+     ('mtg-15', 'zz-account', $1::timestamptz, 'ZZ Still on the book',           'Scheduled', 'zz-broker')`,
+  [FUTURE + " 10:00:00+00", YESTERDAY + " 10:00:00+00",
+   FOUR_AGO + " 10:00:00+00", FAR_OFF + " 10:00:00+00"],
+);
+ws = await reread();
+
+/** The label the Past row would print, for one meeting id. */
+const pastRowLabel = (id) => {
+  const row = S.getMeetingSummaries().find((p) => p.meeting.id === id);
+  return row ? S.pastDateLabel(row.meeting.date) : "(not on Past)";
+};
+
+check(
+  "a future-dated Completed row is on Past",
+  S.getMeetingSummaries().some((p) => p.meeting.id === "mtg-10"),
+);
+check(
+  "and prints no forward-looking label",
+  pastRowLabel("mtg-10") === undefined,
+  String(pastRowLabel("mtg-10")),
+);
+check(
+  "a future-dated Cancelled row is on Past",
+  S.getMeetingSummaries().some((p) => p.meeting.id === "mtg-11"),
+);
+check(
+  "and prints no forward-looking label either",
+  pastRowLabel("mtg-11") === undefined,
+  String(pastRowLabel("mtg-11")),
+);
+check("a Completed row dated yesterday prints Yesterday", pastRowLabel("mtg-12") === "Yesterday", String(pastRowLabel("mtg-12")));
+check("a Completed row dated four days ago prints 4 days ago", pastRowLabel("mtg-13") === "4 days ago", String(pastRowLabel("mtg-13")));
+check("a Completed row dated long ago prints nothing", pastRowLabel("mtg-14") === undefined, String(pastRowLabel("mtg-14")));
+
+/* The Scheduled sibling, same date, still reads forward — Upcoming unchanged. */
+const upcomingRow = S.getUpcomingMeetings().find((u) => u.meeting?.id === "mtg-15");
+check("the Scheduled sibling is on Upcoming", upcomingRow !== undefined);
+check(
+  "and it still reads In 6 days, because it genuinely is ahead",
+  upcomingRow && S.relativeDateLabel(upcomingRow.date) === "In 6 days",
+  upcomingRow && S.relativeDateLabel(upcomingRow.date),
+);
+
+/* The detail page's own choice, which is status-aware rather than positional. */
+const ST = await load("src/lib/status.ts");
+const detailLabel = (id) => {
+  const d = S.getMeetingDetail(id);
+  return ST.isPastMeeting(d.meeting.status)
+    ? S.pastDateLabel(d.meeting.date)
+    : S.relativeDateLabel(d.meeting.date);
+};
+check(
+  "the detail page reads backward for a future-dated Completed meeting",
+  detailLabel("mtg-10") === undefined,
+  String(detailLabel("mtg-10")),
+);
+check(
+  "backward for a future-dated Cancelled meeting",
+  detailLabel("mtg-11") === undefined,
+  String(detailLabel("mtg-11")),
+);
+check(
+  "and forward for one still on the book",
+  detailLabel("mtg-15") === "In 6 days",
+  String(detailLabel("mtg-15")),
+);
+
+/* == K. Removed again ================================================== */
+
+heading("K. The throwaway database, removed again");
 
 await server.stop();
 await db.close();

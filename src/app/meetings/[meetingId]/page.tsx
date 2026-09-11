@@ -13,9 +13,10 @@ import { loadWorkspace } from "@/lib/db/workspace";
 import {
   formatLongDate,
   getMeetingDetail,
+  pastDateLabel,
   relativeDateLabel,
 } from "@/lib/selectors";
-import { meetingRecordTone } from "@/lib/status";
+import { isPastMeeting, meetingRecordTone } from "@/lib/status";
 
 export async function generateMetadata({
   params,
@@ -48,6 +49,15 @@ export default async function MeetingDetailPage({
 
   const { meeting, retailer, broker, openActions, items, activities } = detail;
 
+  /* Which way the date reads depends on what became of the meeting, not on the
+     date itself. One still on the book is ahead of us and says so; one
+     completed or cancelled is behind us, even where its scheduled day has not
+     arrived — writing a meeting up early is ordinary, and "in 6 days" beside
+     a finished record is not. */
+  const when = isPastMeeting(meeting.status)
+    ? pastDateLabel(meeting.date)
+    : relativeDateLabel(meeting.date);
+
   return (
     <>
       <header className="mb-9">
@@ -75,11 +85,7 @@ export default async function MeetingDetailPage({
           </h1>
 
           <p className="type-label mt-3.5">
-            {formatLongDate(meeting.date) +
-              (relativeDateLabel(meeting.date)
-                ? " · " + relativeDateLabel(meeting.date)
-                : "") +
-              " · "}
+            {formatLongDate(meeting.date) + (when ? " · " + when : "") + " · "}
             {/* The one primitive that answers for a meeting nobody is
                 recorded against, rather than linking to a broker that is
                 not there. */}
