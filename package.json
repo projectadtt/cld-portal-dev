@@ -31,7 +31,8 @@
     "db:meetings-nullable": "node --import ./scripts/db/alias.mjs scripts/db/write/meetings-nullable.mjs",
     "db:meeting-create": "node --import ./scripts/db/alias.mjs scripts/db/write/meeting-create.mjs",
     "db:meeting-update": "node --import ./scripts/db/alias.mjs scripts/db/write/meeting-update.mjs",
-    "db:meeting-activity": "node --import ./scripts/db/alias.mjs scripts/db/write/meeting-activity.mjs"
+    "db:meeting-activity": "node --import ./scripts/db/alias.mjs scripts/db/write/meeting-activity.mjs",
+    "db:retailer-sizing": "node --import ./scripts/db/alias.mjs scripts/db/write/retailer-sizing.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.42.0",

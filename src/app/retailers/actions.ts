@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth/session";
 import {
   createRetailer,
   setEntityImage,
+  updateRetailerSizing,
   updateRetailerStatus,
   type FieldErrors,
 } from "@/lib/db/mutations";
@@ -118,6 +119,48 @@ export async function updateRetailerStatusAction(
      field: it sets the Overview funnel, the workstream ordering, the phase an
      account is grouped under on Retailers, and both reports. The whole tree is
      revalidated rather than a guessed subset. */
+  revalidatePath("/", "layout");
+
+  return { errors: {}, saved: result.changed, savedAt: Date.now() };
+}
+
+/**
+ * Sizing an account.
+ *
+ * Bound to one account by an id the page supplies rather than the form, and
+ * carrying only the three planning figures the opportunity map reads. It
+ * cannot move a pipeline status, reassign a broker or touch any record that
+ * hangs off the account — the mutation it calls writes three columns and
+ * nothing else.
+ *
+ * Like the status action it does not redirect: the person is on the account
+ * and stays there, and the form reports which figures moved.
+ */
+export async function updateRetailerSizingAction(
+  retailerId: string,
+  _previous: RetailerFormState,
+  form: FormData,
+): Promise<RetailerFormState> {
+  /* Every server action is a POST endpoint in its own right, reachable
+     whether or not a page ever rendered a form pointing at it. The proxy
+     turns unauthenticated requests away at the perimeter; this is the check
+     that still holds if the perimeter ever does not. */
+  await requireSession();
+
+  const result = await updateRetailerSizing(retailerId, {
+    approximateDoors: text(form, "approximateDoors"),
+    assumedSkus: text(form, "assumedSkus"),
+    unitsPerStoreWeek: text(form, "unitsPerStoreWeek"),
+  });
+
+  if (!result.ok) {
+    return { errors: result.errors, saved: null, savedAt: _previous.savedAt };
+  }
+
+  /* Sizing decides whether this account can be plotted on the Overview's
+     opportunity map at all, and the door count is printed on the account's own
+     page. The whole tree is revalidated rather than a guessed subset, for the
+     same reason the status action does. */
   revalidatePath("/", "layout");
 
   return { errors: {}, saved: result.changed, savedAt: Date.now() };

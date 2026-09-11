@@ -9,6 +9,9 @@ import { getRetailer, pageTitle } from "@/lib/selectors";
 /** Always fresh: the form opens on where the account stands right now. */
 export const dynamic = "force-dynamic";
 
+/** An unrecorded figure is an empty box, never a zero — zero is an answer. */
+const box = (value: number | undefined) => (value === undefined ? "" : String(value));
+
 export async function generateMetadata({
   params,
 }: PageProps<"/retailers/[retailerId]/edit">) {
@@ -20,10 +23,12 @@ export async function generateMetadata({
 /**
  * Moving an account along the pipeline.
  *
- * Scoped to the three fields that change as a conversation progresses. The
- * account's identity — its name, channel, logo and broker — is not editable
- * here, which is what makes this page safe to reach from a live meeting: there
- * is nothing on it that can rename a record or disturb a relationship.
+ * Scoped to the three fields that change as a conversation progresses, and —
+ * in a second, separate form — the three planning figures the opportunity map
+ * sizes an account from. The account's identity — its name, channel, logo and
+ * broker — is not editable here, which is what makes this page safe to reach
+ * from a live meeting: there is nothing on it that can rename a record or
+ * disturb a relationship.
  */
 export default async function EditRetailerStatusPage({
   params,
@@ -64,6 +69,11 @@ export default async function EditRetailerStatusPage({
           currentTarget: retailer.currentTarget,
           pipelineStatus: retailer.overallStatus,
           standing: retailer.standing,
+        }}
+        sizing={{
+          approximateDoors: box(retailer.approximateDoors),
+          assumedSkus: box(retailer.assumedSkus),
+          unitsPerStoreWeek: box(retailer.unitsPerStoreWeek),
         }}
         cancelHref={"/retailers/" + retailer.id}
       />

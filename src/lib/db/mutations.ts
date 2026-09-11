@@ -1345,6 +1345,137 @@ export async function updateRetailerStatus(
   return result;
 }
 
+/** The three planning inputs the opportunity map sizes an account from. */
+export interface RetailerSizingEdit {
+  /** Whole stores. Blank means unknown. */
+  approximateDoors: string;
+  /** Whole SKUs assumed to list. Blank means unknown. */
+  assumedSkus: string;
+  /** Units per store per week, to two decimals. Blank means unknown. */
+  unitsPerStoreWeek: string;
+}
+
+/**
+ * Sizing an account — the three planning assumptions, and nothing else.
+ *
+ * These are the only inputs `getOpportunityMap()` sizes a mark from: doors x
+ * SKUs x units per store per week x 52. Until all three are recorded the
+ * account cannot be plotted at all, which is why they are written together
+ * here rather than one at a time.
+ *
+ * ALL THREE OR NONE, DELIBERATELY.
+ * A partial set is not a smaller answer, it is an unusable one -- the
+ * selector excludes an account missing any one of the three, so writing two
+ * of them stores work that changes nothing on any screen. Leaving all three
+ * blank is a different act and is allowed: it takes the account back off the
+ * map, which is the only way a sizing entered for a demo can be undone
+ * through the portal rather than by hand.
+ *
+ * These are assumptions, not measurements. Nothing here consults a market, and
+ * the form that calls it says so on the page. The column names are the
+ * workbook's own words, so a number entered here means what CLD means by it.
+ *
+ * Scoped exactly as `updateRetailerStatus` is: bound to one live account on
+ * this client's book, locked for the duration of the transaction, and unable
+ * to touch the account's identity, its pipeline status, its standing, its
+ * broker or any record that hangs off it.
+ */
+export async function updateRetailerSizing(
+  retailerId: string,
+  edit: RetailerSizingEdit,
+  clientId: string = DEFAULT_CLIENT_ID,
+): Promise<WriteResult> {
+  const result = await withTransaction<WriteResult>(async (client) => {
+    const { rows } = await client.query<{
+      name: string;
+      approximate_doors: number | null;
+      assumed_skus: number | null;
+      units_per_store_week: string | null;
+    }>(
+      `select name, approximate_doors, assumed_skus, units_per_store_week
+         from retailers
+        where id = $1 and client_id = $2 and archived_at is null
+        for update`,
+      [retailerId, clientId],
+    );
+    const existing = rows[0];
+    if (!existing) {
+      return {
+        ok: false,
+        errors: { form: "That account is not on this client's book. Nothing was saved." },
+      };
+    }
+
+    const errors: FieldErrors = {};
+
+    /* Counted from the raw boxes rather than from the parsed values, because a
+       field that failed validation also parses to null and would otherwise
+       read as "left blank". */
+    const given = [
+      edit.approximateDoors,
+      edit.assumedSkus,
+      edit.unitsPerStoreWeek,
+    ].filter((raw) => raw.trim() !== "").length;
+
+    /* The ceilings are the columns' own: approximate_doors and assumed_skus
+       are `integer`, units_per_store_week is `numeric(6,2)`, which cannot hold
+       10000 at all. A generous bound below each one is a typo guard, in the
+       same shape the product costs already use. */
+    const approximateDoors = optionalNumber(edit.approximateDoors, "approximateDoors", errors, {
+      integer: true,
+      max: 100_000,
+    });
+    const assumedSkus = optionalNumber(edit.assumedSkus, "assumedSkus", errors, {
+      integer: true,
+      max: 10_000,
+    });
+    const unitsPerStoreWeek = optionalNumber(edit.unitsPerStoreWeek, "unitsPerStoreWeek", errors, {
+      max: 9_999.99,
+    });
+
+    if (given > 0 && given < 3) {
+      errors.form =
+        "Sizing needs all three figures, or none of them. " +
+        "An account is only placed on the opportunity map once doors, SKUs and " +
+        "weekly units are all recorded.";
+    }
+
+    if (Object.keys(errors).length > 0) return { ok: false, errors };
+
+    await client.query(
+      `update retailers
+          set approximate_doors = $1, assumed_skus = $2, units_per_store_week = $3
+        where id = $4`,
+      [approximateDoors, assumedSkus, unitsPerStoreWeek, retailerId],
+    );
+
+    /* Field by field, and only what moved. The stored numeric comes back from
+       the driver as a string, so the comparison is made on numbers. */
+    const before = {
+      doors: existing.approximate_doors,
+      skus: existing.assumed_skus,
+      units: existing.units_per_store_week === null ? null : Number(existing.units_per_store_week),
+    };
+
+    const changed: string[] = [];
+    const moved = (was: number | null, now: number | null, label: string) => {
+      if (was === now) return;
+      changed.push(`${label} -> ${now === null ? "not recorded" : now}`);
+    };
+    moved(before.doors, approximateDoors, "Approximate doors");
+    moved(before.skus, assumedSkus, "Assumed SKUs");
+    moved(before.units, unitsPerStoreWeek, "Units per store / week");
+
+    return {
+      ok: true,
+      changed: changed.length > 0 ? changed : ["Nothing changed"],
+    };
+  });
+
+  if (result.ok) resetWorkspace(clientId);
+  return result;
+}
+
 /* ── Workstream items ──────────────────────────────────────────────────── */
 
 /**
