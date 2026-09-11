@@ -632,6 +632,122 @@ export async function saveAction(
   return result;
 }
 
+/** What the new-action form says. Four fields, and no fifth. */
+export interface ActionDraft {
+  /** A retailer on this client's book. Verified, never trusted. */
+  retailerId: string;
+  /** A live broker on this client's book. Verified, never trusted. */
+  ownerId: string;
+  /** The wording the shared action list is read by. */
+  label: string;
+  /** ISO calendar day, yyyy-mm-dd. Required — see the note below. */
+  due: string;
+}
+
+/**
+ * Putting one piece of work on the shared action list.
+ *
+ * Four fields. Status is not among them: a piece of work being written down
+ * for the first time has not been started, so it is Open, and offering the
+ * choice would invite someone to file something as Done that nobody did.
+ * `completed_at` therefore stays null with no rule needed.
+ *
+ * The product, the workstream item and the meeting an action can hang off are
+ * all absent on purpose. Each is a real relationship, each needs its own
+ * scoped select and its own verification, and none of them is required for the
+ * work to be picked up and done. An action created from the workstream already
+ * carries its item through `saveWorkstreamItem`'s tracking path; this is the
+ * one that belongs to the account rather than to an item.
+ *
+ * WHY `due` IS REQUIRED THOUGH THE COLUMN IS NOT
+ * `actions.due` is nullable in Postgres, but `Action.due` is typed `string` in
+ * the read layer and `byDueAsc` sorts on `a.due.localeCompare(b.due)`. A row
+ * with no date would throw there and take the Overview, Actions, Retailers,
+ * Brokers, Products, Meetings and both reports down together. Nothing can
+ * write that today -- `saveAction` checks the date and `saveWorkstreamItem`
+ * refuses a step without one -- and this path does not become the first thing
+ * that can. Requiring a date is also the honest product answer: a move with no
+ * date is not a next move.
+ */
+export async function createAction(
+  draft: ActionDraft,
+  clientId: string = DEFAULT_CLIENT_ID,
+): Promise<CreateResult> {
+  const result = await withTransaction<CreateResult>(async (client): Promise<CreateResult> => {
+    const errors: FieldErrors = {};
+
+    const label = draft.label.trim();
+    const due = draft.due.trim();
+
+    if (!label) errors.label = "Say what has to happen.";
+    else if (label.length > 300) errors.label = "Keep the action to a sentence.";
+
+    if (!due) errors.due = "Say when it is due.";
+    else if (notADate(due)) errors.due = "Needs a real date.";
+
+    /* Both relationships are checked here rather than trusted from the form. A
+       server action is a POST endpoint of its own, so every id in the request
+       is a request input whoever sent it chose. */
+    const { rows: retailerRows } = await client.query<{ id: string; name: string }>(
+      `select id, name from retailers
+        where id = $1 and client_id = $2 and archived_at is null`,
+      [draft.retailerId, clientId],
+    );
+    const retailer = retailerRows[0];
+    if (!retailer) {
+      errors.retailerId = !draft.retailerId.trim()
+        ? "Pick the account this work is on."
+        : "That account is not on this client's book.";
+    }
+
+    /* The same helper `saveAction` and `saveWorkstreamItem` use, so an owner
+       accepted by one path cannot be refused by another. It checks the client
+       and that the broker has not been archived. */
+    if (!draft.ownerId.trim()) {
+      errors.ownerId = "Say whose work this is.";
+    } else if (!(await isOwner(client, draft.ownerId, clientId))) {
+      errors.ownerId = "Not an active broker on this client's book.";
+    }
+
+    if (Object.keys(errors).length > 0) return { ok: false, changed: [], errors };
+
+    /* Past the guard above, so the account resolved. Held in a local rather
+       than asserted, because the check that proved it only recorded an error. */
+    const retailerName = retailer.name;
+
+    /* Ids stay in the readable act-NN series the rest of the data uses -- the
+       same allocation `saveWorkstreamItem`'s tracking path uses, so the two
+       creation routes draw from one sequence. Two simultaneous creations would
+       collide on the primary key and the second transaction would fail loudly,
+       which is the correct outcome: nothing is silently renumbered. */
+    const { rows: nextIdRows } = await client.query<{ next: string }>(
+      `select 'act-' || lpad((coalesce(max(substring(id from 5)::integer), 0) + 1)::text, 2, '0') as next
+         from actions where id ~ '^act-[0-9]+$'`,
+    );
+    const id = nextIdRows[0].next;
+
+    /* status takes the column default 'Open'; product_id, workstream_item_id,
+       meeting_id, description and completed_at are all left unset rather than
+       written as nulls, so the row says only what somebody actually supplied. */
+    await client.query(
+      `insert into actions (id, retailer_id, owner_id, label, status, due, display_order)
+       values ($1, $2, $3, $4, 'Open', $5,
+               (select coalesce(max(display_order), 0) + 1 from actions))`,
+      [id, draft.retailerId, draft.ownerId, label, due],
+    );
+
+    return {
+      ok: true,
+      errors: {},
+      changed: [`${label} added to ${retailerName}, due ${due}`],
+      id,
+    };
+  });
+
+  if (result.ok) resetWorkspace(clientId);
+  return result;
+}
+
 /* ── The workspace ─────────────────────────────────────────────────────── */
 
 /**

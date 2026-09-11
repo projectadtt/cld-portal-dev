@@ -10,6 +10,7 @@ import { ActionSummary } from "@/components/actions/ActionSummary";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/primitives/EmptyState";
 import { SectionHeader } from "@/components/primitives/SectionHeader";
+import { SectionLink } from "@/components/primitives/SectionLink";
 import { countActions, getActionGroups, pageTitle } from "@/lib/selectors";
 import { loadWorkspace } from "@/lib/db/workspace";
 
@@ -47,7 +48,12 @@ export default async function ActionsPage({
         eyebrow="Actions"
         title="What needs to happen next."
         description="Open work across the retail relationships, with ownership and timing kept in view."
-      />
+      >
+        {/* PageHeader's own slot for a right-side action, the same place the
+            Retailers screen puts its own. Filled, because writing down the
+            next move is the one thing this screen is for besides reading. */}
+        <SectionLink href="/actions/new" cta>Add an action</SectionLink>
+      </PageHeader>
 
       <ActionSummary />
 

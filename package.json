@@ -32,7 +32,8 @@
     "db:meeting-create": "node --import ./scripts/db/alias.mjs scripts/db/write/meeting-create.mjs",
     "db:meeting-update": "node --import ./scripts/db/alias.mjs scripts/db/write/meeting-update.mjs",
     "db:meeting-activity": "node --import ./scripts/db/alias.mjs scripts/db/write/meeting-activity.mjs",
-    "db:retailer-sizing": "node --import ./scripts/db/alias.mjs scripts/db/write/retailer-sizing.mjs"
+    "db:retailer-sizing": "node --import ./scripts/db/alias.mjs scripts/db/write/retailer-sizing.mjs",
+    "db:action-create": "node --import ./scripts/db/alias.mjs scripts/db/write/action-create.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.42.0",
