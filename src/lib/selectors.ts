@@ -36,6 +36,7 @@ import {
   PIPELINE_PHASES,
   isConversation,
   isHeldMeeting,
+  isPastMeeting,
   isOpenAction,
   isApproved,
   isPitched,
@@ -1100,15 +1101,19 @@ export function getAllMeetingIds(): string[] {
 }
 
 /**
- * Every meeting held, most recent first — what the Past tab is.
+ * Every meeting no longer ahead of us, most recent first — the Past tab.
  *
- * Completed only. A cancelled meeting was never held, so it is not a record of
- * anything that was said, and "Past meetings" is where the portal keeps what
- * was said. Nothing can reach that state through the portal yet; see the
- * cancellation workflow, which is deliberately not built.
+ * Completed and Cancelled both. A cancelled meeting has nothing to quote, but
+ * it is still part of the account's record — it was on the book and it is not
+ * any more — and a record that appears on neither tab has effectively been
+ * deleted by the interface. Its status is shown on the row, so the two are
+ * never mistaken for each other.
+ *
+ * Not the same question as `getRetailerMeetings`, which asks what was actually
+ * held and so stays Completed-only.
  */
 export function getMeetings(): Meeting[] {
-  return d.meetings.filter((m) => isHeldMeeting(m.status)).sort(byDateDesc);
+  return d.meetings.filter((m) => isPastMeeting(m.status)).sort(byDateDesc);
 }
 
 /**
@@ -2152,10 +2157,17 @@ export function getBrokerDetail(id: string): BrokerDetail | null {
   };
 }
 
-/** Meetings this broker ran, flattened for the shared notes panel. */
+/**
+ * Meetings this broker ran, flattened for the shared notes panel.
+ *
+ * Held ones only. This reads `d.meetings` directly, and when the status filter
+ * moved out of the query it was the one place left unnarrowed — so a meeting
+ * merely on the book, or one that was cancelled, was appearing in a panel
+ * headed "Meeting notes" with nothing to show.
+ */
 export function getBrokerNotes(brokerId: BrokerId): RetailerNote[] {
   return d.meetings
-    .filter((m) => m.brokerId === brokerId)
+    .filter((m) => m.brokerId === brokerId && isHeldMeeting(m.status))
     .sort(byDateDesc)
     .map((m) => ({
       id: m.id,

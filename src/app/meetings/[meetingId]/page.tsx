@@ -112,6 +112,11 @@ export default async function MeetingDetailPage({
             <SectionHeader
               title="Meeting notes"
               description="What was actually said in the room."
+              action={
+                <SectionLink href={"/meetings/" + meeting.id + "/edit"}>
+                  {meeting.summary ? "Edit the write-up" : "Write it up"}
+                </SectionLink>
+              }
             />
             {/* A meeting can be on the book before anybody writes it up. The
                 heading stays, because the absence is the point; nothing is

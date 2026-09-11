@@ -2,6 +2,7 @@ import { ArrowUpRight, CalendarClock } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/primitives/EmptyState";
+import { StatusBadge } from "@/components/primitives/StatusBadge";
 import { meta } from "@/lib/cn";
 import {
   formatLongDate,
@@ -9,14 +10,21 @@ import {
   UNASSIGNED,
   type MeetingSummary,
 } from "@/lib/selectors";
+import { meetingRecordTone } from "@/lib/status";
 
 /**
- * Meetings that have been held, most recent first.
+ * The record of meetings no longer ahead of us, most recent first.
  *
  * A three-column editorial row rather than a CRM table: when, who it was
  * with, and what came of it. The summary is the widest column because it is
  * the reason the record exists — squeezing it into a table cell would be
  * exactly the wrong trade.
+ *
+ * Both Completed and Cancelled meetings live here, so each row carries its
+ * status: forest for one that happened, faint for one that did not. A
+ * cancelled meeting is a diary change rather than a failure, so it is quiet
+ * rather than red — and it is here at all because a record on neither tab has
+ * effectively been deleted by the interface.
  *
  * The whole row is a link into the meeting record.
  */
@@ -25,7 +33,7 @@ export function MeetingList({ summaries }: { summaries: MeetingSummary[] }) {
     return (
       <EmptyState
         icon={CalendarClock}
-        message="No meetings have been held yet."
+        message="No meetings are on the record yet. Nothing has been held or cancelled."
       />
     );
   }
@@ -68,6 +76,14 @@ export function MeetingList({ summaries }: { summaries: MeetingSummary[] }) {
               <p className="type-label mt-1.5">
                 {meta(retailer.name, broker?.name ?? UNASSIGNED)}
               </p>
+
+              {/* What became of it, so Completed and Cancelled are never read
+                  as the same thing. Tone comes from the shared map. */}
+              <StatusBadge
+                label={meeting.status}
+                tone={meetingRecordTone[meeting.status]}
+                className="mt-2"
+              />
             </div>
 
             <div className="min-w-0">

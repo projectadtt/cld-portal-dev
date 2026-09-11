@@ -45,8 +45,10 @@ export default async function MeetingsPage({
       >
         <div className="sm:text-right">
           <p className="type-label">On the record</p>
+          {/* "on the record" rather than "held": the past list carries
+              cancelled meetings too, and they were never held. */}
           <p className="mt-1.5 text-sm text-ink">
-            {past.length + " meetings held · " + upcoming.length + " on the books"}
+            {past.length + " on the record · " + upcoming.length + " on the books"}
           </p>
         </div>
       </PageHeader>

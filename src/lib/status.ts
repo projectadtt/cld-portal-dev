@@ -297,6 +297,20 @@ export function isHeldMeeting(status: MeetingRecordStatus): boolean {
   return status === "Completed";
 }
 
+/**
+ * A meeting that is no longer ahead of us — the record of what happened.
+ *
+ * Wider than `isHeldMeeting` on purpose, and the difference is the whole
+ * reason both exist. A cancelled meeting belongs in the record: it was on the
+ * book, it is not any more, and that is a fact about the account worth being
+ * able to find. But it was never held, so it has nothing to quote — which is
+ * why the notes panel, `getLastMeeting` and the account's derived meeting
+ * status ask the narrower question instead.
+ */
+export function isPastMeeting(status: MeetingRecordStatus): boolean {
+  return status !== "Scheduled";
+}
+
 /* ── Action status ─────────────────────────────────────────────────────── */
 
 export const ACTION_STATUSES = ["Open", "In Progress", "Blocked", "Done"] as const;

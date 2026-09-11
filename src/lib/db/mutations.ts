@@ -1599,6 +1599,134 @@ export async function createMeeting(
   return result;
 }
 
+/** What the meeting record's own form says. Three fields, and no more. */
+export interface MeetingEdit {
+  /** What was said. Empty becomes NULL, never an empty string. */
+  summary: string;
+  /** One decision per line, as typed. Empty becomes an empty array. */
+  decisions: string;
+  /** lookup_meeting_status. All three are reachable here. */
+  status: string;
+}
+
+/**
+ * Writing up a meeting that already exists.
+ *
+ * The three things that change after a conversation: what was said, what it
+ * settled, and whether it has happened. Everything that makes the meeting
+ * *that* meeting — which account, which broker, when, what it is called — is
+ * not on this form and not in this statement. That is what makes the edit safe
+ * to reach from a live meeting: there is no field here that can move a record
+ * to another account, rewrite its history, or break a relationship.
+ *
+ * The status transition is the interesting one. Scheduled -> Completed moves
+ * the meeting out of Upcoming and into Past, and that is the whole of its
+ * effect: no activity row, no action, no change to the account's planning
+ * fields or to any workstream item. Each of those is a separate phase, and
+ * doing a piece of one here would be the start of two sources of truth.
+ */
+export async function updateMeeting(
+  meetingId: string,
+  edit: MeetingEdit,
+  clientId: string = DEFAULT_CLIENT_ID,
+): Promise<WriteResult> {
+  const result = await withTransaction<WriteResult>(async (client) => {
+    /* meetings carries no client_id, so tenancy is reached through the account
+       it belongs to -- the same join the read layer uses. `for update of m`
+       locks the meeting row only: the retailer is read to prove ownership, not
+       to be changed, and locking it would block unrelated writes. */
+    const { rows } = await client.query<{
+      title: string;
+      status: string;
+      summary: string | null;
+      decisions: string[];
+    }>(
+      `select m.title, m.status, m.summary, m.decisions
+         from meetings m
+         join retailers r on r.id = m.retailer_id
+        where m.id = $1 and r.client_id = $2 and r.archived_at is null
+        for update of m`,
+      [meetingId, clientId],
+    );
+    const existing = rows[0];
+    if (!existing) {
+      return {
+        ok: false,
+        errors: { form: "That meeting is not on this client's book. Nothing was saved." },
+      };
+    }
+
+    const errors: FieldErrors = {};
+
+    /* Validated twice, as every status in this layer is: once against the
+       vocabulary the portal can render, and once against the lookup table,
+       which is the authority. */
+    if (!MEETING_RECORD_STATUSES.includes(edit.status as MeetingRecordStatus)) {
+      errors.status = "Pick a status the portal knows how to show.";
+    } else if (!(await inLookup(client, "lookup_meeting_status", edit.status))) {
+      errors.status = "That status is not in the database's vocabulary.";
+    }
+
+    const summary = trimmed(edit.summary);
+    if (summary && summary.length > 4000) {
+      errors.summary = "That is longer than a set of notes. Trim it down.";
+    }
+
+    /* One decision per line. Blank lines are separators a person typed while
+       thinking, not decisions, so they are dropped rather than stored as
+       empty strings -- an empty decision would render as a bullet with
+       nothing beside it. */
+    const decisions = edit.decisions
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    if (decisions.some((d) => d.length > 500)) {
+      errors.decisions = "Keep each decision to a sentence or two.";
+    }
+    if (decisions.length > 20) {
+      errors.decisions = "Twenty decisions is a meeting that needed minutes, not a record.";
+    }
+
+    if (Object.keys(errors).length > 0) return { ok: false, errors };
+
+    /* Exactly three columns. retailer_id, broker_id, scheduled_at, title and
+       location are absent from this statement, so no value this form can carry
+       is able to reach them. */
+    await client.query(
+      `update meetings set summary = $1, decisions = $2, status = $3 where id = $4`,
+      [summary, decisions, edit.status, meetingId],
+    );
+
+    /* Reported field by field, and only what actually moved. Saving a form
+       nobody changed says so rather than claiming a save that did nothing. */
+    const changed: string[] = [];
+    if (existing.status !== edit.status) {
+      changed.push(`Status -> ${edit.status}`);
+    }
+    if ((existing.summary ?? null) !== summary) {
+      changed.push(summary ? "Notes written up" : "Notes cleared");
+    }
+    if (existing.decisions.join("\n") !== decisions.join("\n")) {
+      changed.push(
+        decisions.length === 0
+          ? "Decisions cleared"
+          : decisions.length === 1
+            ? "1 decision recorded"
+            : `${decisions.length} decisions recorded`,
+      );
+    }
+
+    return {
+      ok: true,
+      changed: changed.length > 0 ? changed : ["Nothing changed"],
+    };
+  });
+
+  if (result.ok) resetWorkspace(clientId);
+  return result;
+}
+
 /* ── Images ────────────────────────────────────────────────────────────── */
 
 /**
